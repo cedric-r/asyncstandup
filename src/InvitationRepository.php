@@ -43,8 +43,9 @@ function getInvitationByToken(PDO $pdo, string $token): ?array
 
 function markAccepted(PDO $pdo, int $invitationId): void
 {
-    $pdo->prepare('UPDATE invitations SET accepted_at = UTC_TIMESTAMP() WHERE id = ?')
-        ->execute([$invitationId]);
+    $ts = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+    $pdo->prepare('UPDATE invitations SET accepted_at = ? WHERE id = ?')
+        ->execute([$ts, $invitationId]);
 }
 
 /**
@@ -65,11 +66,18 @@ function isAlreadyTeamMember(PDO $pdo, int $teamId, string $email): bool
 /**
  * Apply invitation roles and add user to team_members.
  *
- * Uses INSERT ... ON DUPLICATE KEY UPDATE to safely handle edge cases
- * where the user is already a member.
+ * Handles the case where the user is already a member (upsert behaviour):
+ * tries INSERT first; falls back to UPDATE on UNIQUE violation (code 23000).
+ * This pattern is compatible with both MySQL and SQLite.
+ *
+ * @param ?DateTimeImmutable $now  Injectable for testing; defaults to current UTC.
  */
-function acceptInvitationForUser(PDO $pdo, string $token, int $userId): bool
-{
+function acceptInvitationForUser(
+    PDO $pdo,
+    string $token,
+    int $userId,
+    ?DateTimeImmutable $now = null
+): bool {
     $invitation = getInvitationByToken($pdo, $token);
 
     if ($invitation === null) {
@@ -83,7 +91,7 @@ function acceptInvitationForUser(PDO $pdo, string $token, int $userId): bool
     // Expiry check: 7 days from created_at.
     $createdAt = new DateTimeImmutable($invitation['created_at'], new DateTimeZone('UTC'));
     $expiresAt = $createdAt->modify('+7 days');
-    $now       = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    $now     ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));
 
     if ($now > $expiresAt) {
         return false;
@@ -94,14 +102,23 @@ function acceptInvitationForUser(PDO $pdo, string $token, int $userId): bool
     $isDeveloper = in_array('developer', $roles, true) ? 1 : 0;
     $isRecipient = in_array('recipient', $roles, true) ? 1 : 0;
 
-    $pdo->prepare('
-        INSERT INTO team_members (team_id, user_id, is_owner, is_developer, is_recipient)
-        VALUES (?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            is_owner     = VALUES(is_owner),
-            is_developer = VALUES(is_developer),
-            is_recipient = VALUES(is_recipient)
-    ')->execute([$invitation['team_id'], $userId, $isOwner, $isDeveloper, $isRecipient]);
+    // Upsert: try INSERT; on UNIQUE collision UPDATE existing roles.
+    // Compatible with MySQL (code '23000') and SQLite (same SQLSTATE).
+    try {
+        $pdo->prepare('
+            INSERT INTO team_members (team_id, user_id, is_owner, is_developer, is_recipient)
+            VALUES (?, ?, ?, ?, ?)
+        ')->execute([$invitation['team_id'], $userId, $isOwner, $isDeveloper, $isRecipient]);
+    } catch (PDOException $e) {
+        if ($e->getCode() !== '23000') {
+            throw $e;
+        }
+
+        $pdo->prepare('
+            UPDATE team_members SET is_owner=?, is_developer=?, is_recipient=?
+            WHERE team_id=? AND user_id=?
+        ')->execute([$isOwner, $isDeveloper, $isRecipient, $invitation['team_id'], $userId]);
+    }
 
     markAccepted($pdo, (int) $invitation['id']);
 

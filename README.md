@@ -77,6 +77,32 @@ No rate limiting is implemented in PHP. bcrypt slows individual attempts but doe
 - **CDN / WAF**: most WAF products have brute-force protection rules for login endpoints.
 - **DB-backed counter**: not implemented to keep this project dependency-free; can be added as a separate story if proxy-level protection is unavailable.
 
+## Running Tests (US-9)
+
+### 1. Download PHPUnit PHAR
+
+```bash
+wget https://phar.phpunit.de/phpunit-10.phar -O tests/phpunit.phar
+```
+
+Verify integrity against the published checksum at `https://phar.phpunit.de/phpunit-10.phar.sha256asc`:
+
+```bash
+sha256sum tests/phpunit.phar  # compare against published SHA-256
+```
+
+The PHAR is gitignored — run this once per developer machine.
+
+### 2. Run the suite
+
+```bash
+php tests/phpunit.phar --configuration tests/phpunit.xml
+```
+
+Tests use an in-memory SQLite database — no MySQL connection required. All 21 tests should pass with exit code 0.
+
+---
+
 ## Architecture
 
 ```

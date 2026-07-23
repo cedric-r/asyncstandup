@@ -124,3 +124,66 @@ function getParticipationStats(PDO $pdo, int $teamId, string $dateFrom, string $
 
     return $stats;
 }
+
+/**
+ * Fetch raw standup response rows for a team, with optional date and member filters.
+ *
+ * All four view modes (default 7-day, by_date, by_member, single) are handled
+ * by the same query — $date and $memberId control which rows are returned.
+ *
+ * Returns a flat array of rows; caller assembles into $data[$send_date][$user_id].
+ *
+ * @param string $dateFrom Inclusive lower bound in Y-m-d format.
+ * @param string $dateTo   Inclusive upper bound in Y-m-d format.
+ */
+function getResponseData(
+    PDO $pdo,
+    int $teamId,
+    ?string $date,
+    ?int $memberId,
+    string $dateFrom,
+    string $dateTo
+): array {
+    $params = [':teamId' => $teamId];
+    $where  = ['t.team_id = :teamId', 'tm.is_developer = 1'];
+
+    if ($date !== null) {
+        $where[]            = 't.send_date = :date';
+        $params[':date']    = $date;
+    } else {
+        $where[]            = 't.send_date BETWEEN :dateFrom AND :dateTo';
+        $params[':dateFrom'] = $dateFrom;
+        $params[':dateTo']   = $dateTo;
+    }
+
+    if ($memberId !== null) {
+        $where[]              = 't.user_id = :memberId';
+        $params[':memberId']  = $memberId;
+    }
+
+    $sql = '
+        SELECT
+            t.send_date,
+            t.user_id,
+            u.display_name,
+            t.id         AS token_id,
+            ss.id        AS submission_id,
+            q.id         AS question_id,
+            q.question,
+            q.position,
+            a.answer
+        FROM standup_tokens t
+        JOIN users u             ON u.id = t.user_id
+        JOIN team_members tm     ON tm.team_id = t.team_id AND tm.user_id = t.user_id
+        LEFT JOIN standup_submissions ss ON ss.token_id = t.id
+        LEFT JOIN standup_answers a      ON a.submission_id = ss.id
+        LEFT JOIN team_questions q       ON q.id = a.question_id
+        WHERE ' . implode(' AND ', $where) . '
+        ORDER BY t.send_date DESC, u.display_name ASC, q.position ASC
+    ';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    return $stmt->fetchAll();
+}

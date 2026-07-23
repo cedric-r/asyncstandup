@@ -56,19 +56,22 @@ function deleteOrg(PDO $pdo, int $orgId): void
     if (!empty($teamIds)) {
         $placeholders = implode(',', array_fill(0, count($teamIds), '?'));
 
-        // 1. standup_answers (via submission → token → team)
+        // 1. standup_answers — subquery form (MySQL + SQLite compatible).
         $pdo->prepare("
-            DELETE a FROM standup_answers a
-            JOIN standup_submissions ss ON ss.id = a.submission_id
-            JOIN standup_tokens t ON t.id = ss.token_id
-            WHERE t.team_id IN ({$placeholders})
+            DELETE FROM standup_answers
+            WHERE submission_id IN (
+                SELECT ss.id FROM standup_submissions ss
+                JOIN standup_tokens t ON t.id = ss.token_id
+                WHERE t.team_id IN ({$placeholders})
+            )
         ")->execute($teamIds);
 
-        // 2. standup_submissions
+        // 2. standup_submissions — subquery form.
         $pdo->prepare("
-            DELETE ss FROM standup_submissions ss
-            JOIN standup_tokens t ON t.id = ss.token_id
-            WHERE t.team_id IN ({$placeholders})
+            DELETE FROM standup_submissions
+            WHERE token_id IN (
+                SELECT id FROM standup_tokens WHERE team_id IN ({$placeholders})
+            )
         ")->execute($teamIds);
 
         // 3. standup_tokens
@@ -103,6 +106,17 @@ function deleteOrg(PDO $pdo, int $orgId): void
 function isOrgMember(PDO $pdo, int $orgId, int $userId): bool
 {
     $stmt = $pdo->prepare('SELECT 1 FROM org_members WHERE org_id = ? AND user_id = ?');
+    $stmt->execute([$orgId, $userId]);
+
+    return $stmt->fetchColumn() !== false;
+}
+
+/**
+ * Return true if the given user is the creator of the organisation.
+ */
+function isOrgCreator(PDO $pdo, int $orgId, int $userId): bool
+{
+    $stmt = $pdo->prepare('SELECT 1 FROM organisations WHERE id = ? AND created_by = ?');
     $stmt->execute([$orgId, $userId]);
 
     return $stmt->fetchColumn() !== false;

@@ -1,5 +1,6 @@
 config/config.php
 logs/*.log
 vendor/
+tests/phpunit.phar
 .phpunit.result.cache
 *.DS_Store

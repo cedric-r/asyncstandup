@@ -269,8 +269,95 @@ Phase 5 (standup emails + Mailer) →
 Phase 6 (submission) →
 Phase 7 (dashboard) →
 Phase 8 (summary email) →
-Phase 9 (polish)
+Phase 9 (polish) →
+Phase 10 (PHPUnit tests) →
+Phase 11 (password reset)
 ```
+
+---
+
+## Phase 10: PHPUnit PHAR Test Suite (US-9)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+### Tasks
+47. Obtain PHPUnit PHAR
+    - [ ] Download: `wget https://phar.phpunit.de/phpunit-10.phar -O tests/phpunit.phar`
+    - [ ] Add to `.gitignore` OR commit as binary (< 5 MB) — document choice in README
+    - [ ] Verify: `php tests/phpunit.phar --version` outputs `PHPUnit 10.x.x`
+
+48. Create `tests/schema-sqlite.sql`
+    - [ ] Copy `schema.sql`; strip: `ENGINE=InnoDB`, `DEFAULT CHARSET=utf8mb4`, `UNSIGNED`, `DEFAULT (UTC_TIMESTAMP())`
+    - [ ] Replace `AUTO_INCREMENT` → `AUTOINCREMENT` (INTEGER PK only); `TINYINT(1)` → `INTEGER`
+    - [ ] Add `PRAGMA foreign_keys = ON;` at top
+    - [ ] Test: `sqlite3 :memory: < tests/schema-sqlite.sql` — no errors
+
+49. Create `tests/bootstrap.php`
+    - [ ] `require_once` all tested source files: `StandupEmailer.php`, `SummaryEmailer.php`, `InvitationRepository.php`, `OrgRepository.php`, `SubmissionRepository.php`
+    - [ ] Define `createTestPdo(): PDO` — creates SQLite `:memory:`, enables FK pragma, runs `schema-sqlite.sql`
+
+50. Refactor `src/InvitationRepository.php` ⚠️ **Path B — legacy risk**
+    - [ ] Extract `$now` as optional parameter: `function acceptInvitationForUser(PDO $pdo, string $token, int $userId, ?DateTimeImmutable $now = null): bool`
+    - [ ] Add `$now ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));` as first line of function body
+    - [ ] Verify: all existing call sites pass (no arguments changed)
+
+51. Create `tests/phpunit.xml`
+    - [ ] Bootstrap: `bootstrap.php`; testsuite directory: `.`; `colors=true`; `failOnWarning=true`
+
+52. Create `tests/StandupEmailerTest.php`
+    - [ ] `isTeamDue()` — 6 cases: exact match, 1s before window, 59s before (in window), 59s after (in window), 60s after (outside), different timezone (`America/New_York`, standup `09:00`, nowUtc = winter EST = UTC+5h offset)
+    - [ ] Assert `true` for in-window cases; `false` for outside cases
+
+53. Create `tests/SummaryEmailerTest.php`
+    - [ ] `isSummaryDue()` — same 6 cases with `nowUtc` shifted +1 hour relative to `isTeamDue()` cases
+    - [ ] All expected results identical to `isTeamDue()` equivalents
+
+54. Create `tests/RepositoryTest.php`
+    - [ ] `saveSubmission()` happy path: seed team + user + 2 questions + token; call; assert 1 submission row, 2 answer rows, `used_at` not null
+    - [ ] `saveSubmission()` rollback test: subclass or modify to throw after submission INSERT; assert 0 answer rows (transaction rolled back)
+    - [ ] `assembleSummaryData()`: seed 2 developers, 2 questions, 1 submission + answers for developer A; call; assert A in `submissions` with correct answers, B in `non_submitters`
+    - [ ] `acceptInvitationForUser()` valid path: seed invitation (`created_at` = now); call with default `$now`; assert returns `true`; `team_members` row exists; `accepted_at` set
+    - [ ] `acceptInvitationForUser()` expired path: seed invitation (`created_at` = 8 days ago); call with `$now` = now; assert returns `false`; no `team_members` row
+    - [ ] `acceptInvitationForUser()` already-accepted path: seed invitation with `accepted_at` set; assert returns `false`
+    - [ ] `deleteOrg()` cascade: seed full hierarchy (org → team → member → question → token → submission → answer + summary_sent + recipient + invitation + org_member); call `deleteOrg()`; assert 0 rows in each table; no PDO exception
+
+55. Run full test suite and confirm clean pass
+    - [ ] `php tests/phpunit.phar --configuration tests/phpunit.xml` exits 0
+    - [ ] All 16 assertions pass
+    - [ ] Update README with run command
+
+---
+
+## Phase 11: Password Reset Flow (US-10)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+### Tasks
+56. Update `schema.sql` — add `password_resets` table ⚠️ **Path B — additive**
+    - [ ] Add `CREATE TABLE IF NOT EXISTS password_resets (...)` per US-10 STORY.md schema
+    - [ ] Also add to `tests/schema-sqlite.sql` (strip MySQL-specific syntax)
+
+57. Add password reset functions to `src/Auth.php` ⚠️ **Path B — additive (new functions only)**
+    - [ ] `createPasswordResetToken(PDO $pdo, int $userId): string`
+    - [ ] `findValidResetToken(PDO $pdo, string $token): ?array`
+    - [ ] `applyPasswordReset(PDO $pdo, int $tokenId, int $userId, string $newPassword): void` — transactional
+
+58. Create `templates/email/password_reset.php`
+    - [ ] `$subject` variable
+    - [ ] Plain-text body: greeting using `$user_name`; `$reset_url` as link; expiry note (`$expires_minutes` = 60); security note ("If you did not request this, ignore this email")
+
+59. Create `public/forgot-password.php`
+    - [ ] GET: render form (email input, CSRF token)
+    - [ ] POST: validate CSRF → sanitise email → `SELECT` user by email → if found: `createPasswordResetToken()` + load template + `Mailer::send()`; if not found: do nothing
+    - [ ] Always set flash "If your email is registered, you will receive a reset link"
+    - [ ] PRG redirect to `/forgot-password.php`
+
+60. Create `public/reset-password.php`
+    - [ ] GET: load token → validate (not found → "Invalid link"; `used_at` set → "already used"; expired → "has expired") → render form (new password, confirm, hidden token, CSRF)
+    - [ ] POST: validate CSRF → re-load + re-validate token → validate password ≥ 8 chars + confirm match → `applyPasswordReset()` → flash "Password updated" → redirect `/login.php`
+    - [ ] On validation error: re-render form with token preserved in hidden field; token NOT consumed
+
+61. Commit all changes
+    - [ ] `git add schema.sql tests/schema-sqlite.sql src/Auth.php src/InvitationRepository.php public/forgot-password.php public/reset-password.php templates/email/password_reset.php tests/`
+    - [ ] `git commit -m "feat(us-9,us-10): PHPUnit PHAR test suite and password reset flow"`
 
 ## Technical Notes
 
@@ -281,3 +368,39 @@ Phase 9 (polish)
 - **SMTP socket**: timeout 10s; log to `logs/standup-errors.log` on any `stream_socket_client` failure or unexpected SMTP response
 - **No autoloading**: all `src/*.php` files `require_once`'d explicitly at top of each page script
 - **PRG pattern**: all POST handlers redirect after write (prevents form resubmission on refresh)
+
+---
+
+## Phase 12: Standup Response Browser (US-12)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+### Tasks
+62. Add query functions to `src/DashboardRepository.php` ⚠️ **Path B — additive**
+    - [ ] `getResponseData(PDO, int $teamId, ?string $date, ?int $memberId, string $dateFrom, string $dateTo): array` — core LEFT JOIN query with conditional WHERE; returns flat row array
+    - [ ] `getTeamDevelopers(PDO, int $teamId): array` — reuse if already in `TeamRepository.php`; otherwise add here
+    - [ ] `getTeamQuestions(PDO, int $teamId): array` — reuse if already in `TeamRepository.php`; otherwise add here
+
+63. Create `public/teams/responses.php`
+    - [ ] `requireLogin()` + `(int)$_GET['team_id']` + `isTeamOwner()` → `forbid()` if not owner (first checks before any data load)
+    - [ ] Load team, questions (`ORDER BY position ASC`), is_developer members
+    - [ ] Parse + validate `?date` (format check via `DateTimeImmutable::createFromFormat('Y-m-d', ...)`) and `?member_id` (must be developer member of team)
+    - [ ] Route to one of 4 views: `single` / `by_date` / `by_member` / `default` based on which filters are set
+    - [ ] Compute date window in team timezone: default = last 7 days (`-6 days` to today); member = last 30 days (`-29 days` to today)
+    - [ ] Call `getResponseData()` with appropriate params
+    - [ ] Assemble nested `$data[$send_date][$user_id]` structure from flat rows
+    - [ ] Cross-reference against `$members`: add `no_token = true` rows for members with no token that day; add `submitted = false` rows for members with token but no submission
+    - [ ] Render: filter form (date input, member select, Apply, Clear link); sections per day (newest first); per-member answer list or "No response" / "No email sent" labels
+    - [ ] All answer text via `htmlspecialchars(ENT_QUOTES, 'UTF-8')`; all IDs cast to `(int)` before use in SQL
+
+64. Add "View Responses" link to `public/teams/dashboard.php` ⚠️ **Path B — additive**
+    - [ ] Inside the owner-only rendering path, add link: `<a href="/teams/responses.php?team_id=<?= (int)$teamId ?>">View Responses</a>`
+    - [ ] Verify link absent in non-owner (member) path
+
+65. Manual verification
+    - [ ] Default view (no filter): 7-day grid with answers renders correctly
+    - [ ] Date filter: single-day view shows all members
+    - [ ] Member filter: 30-day history for one member
+    - [ ] Combined filter: single member + single day
+    - [ ] Non-owner visits responses.php → 403
+    - [ ] Invalid date format → error message shown; no crash
+    - [ ] Commit: `git commit -m "feat(us-12): standup response browser"`

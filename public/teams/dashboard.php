@@ -19,12 +19,15 @@ $team   = getTeamById($pdo, $teamId);
 $userId = (int) $_SESSION['user_id'];
 
 if ($team === null || !isTeamMember($pdo, $teamId, $userId)) {
-    http_response_code(403);
-    echo 'Forbidden';
-    exit;
+    forbid();
 }
 
 $isOwner = isTeamOwner($pdo, $teamId, $userId);
+
+// US-11: dashboard is owner-only.
+if (!$isOwner) {
+    forbid();
+}
 
 // 7-day date range in team timezone.
 $teamTz = new DateTimeZone($team['timezone']);
@@ -132,6 +135,7 @@ ob_start();
     <a href="/dashboard.php" class="btn btn-secondary">← Back to Dashboard</a>
     <?php if ($isOwner): ?>
     <a href="/teams/members.php?team_id=<?= (int) $teamId ?>" class="btn btn-secondary">Manage Members</a>
+    <a href="/teams/responses.php?team_id=<?= (int) $teamId ?>" class="btn btn-secondary">View Responses</a>
     <?php endif; ?>
 </div>
 <?php

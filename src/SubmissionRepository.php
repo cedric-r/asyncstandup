@@ -71,9 +71,10 @@ function saveSubmission(PDO $pdo, int $tokenId, int $userId, int $teamId, array 
             $answerStmt->execute([$submissionId, (int) $questionId, (string) $answer]);
         }
 
-        // Mark token as used.
-        $pdo->prepare('UPDATE standup_tokens SET used_at = UTC_TIMESTAMP() WHERE id = ?')
-            ->execute([$tokenId]);
+        // Mark token as used. PHP-computed timestamp for MySQL+SQLite compatibility.
+        $usedAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+        $pdo->prepare('UPDATE standup_tokens SET used_at = ? WHERE id = ?')
+            ->execute([$usedAt, $tokenId]);
 
         $pdo->commit();
     } catch (Throwable $e) {

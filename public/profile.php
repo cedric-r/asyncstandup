@@ -16,28 +16,50 @@ $user = getCurrentUser($pdo);
 
 $errors = [];
 
+$action = $_POST['action'] ?? '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     validateCsrfToken($_POST['csrf_token'] ?? '');
 
-    $displayName = trim($_POST['display_name'] ?? '');
-    $timezone    = trim($_POST['timezone'] ?? 'UTC');
-    $validTzs    = DateTimeZone::listIdentifiers();
+    if ($action === 'change_password') {
+        // Change-password sub-form.
+        $currentPw  = $_POST['current_password'] ?? '';
+        $newPw      = $_POST['new_password'] ?? '';
+        $confirmPw  = $_POST['confirm_password'] ?? '';
 
-    if ($displayName === '') {
-        $errors[] = 'Display name is required.';
-    }
+        if (strlen($newPw) < 8) {
+            $errors[] = 'New password must be at least 8 characters.';
+        } elseif ($newPw !== $confirmPw) {
+            $errors[] = 'New passwords do not match.';
+        } elseif (!changePassword($pdo, (int) $_SESSION['user_id'], $currentPw, $newPw)) {
+            $errors[] = 'Current password is incorrect.';
+        } else {
+            setFlash('success', 'Password changed successfully.');
+            header('Location: /profile.php');
+            exit;
+        }
+    } else {
+        // Profile sub-form.
+        $displayName = trim($_POST['display_name'] ?? '');
+        $timezone    = trim($_POST['timezone'] ?? 'UTC');
+        $validTzs    = DateTimeZone::listIdentifiers();
 
-    if (!in_array($timezone, $validTzs, true)) {
-        $errors[] = 'Invalid timezone.';
-    }
+        if ($displayName === '') {
+            $errors[] = 'Display name is required.';
+        }
 
-    if (empty($errors)) {
-        $stmt = $pdo->prepare('UPDATE users SET display_name = ?, timezone = ? WHERE id = ?');
-        $stmt->execute([$displayName, $timezone, (int) $_SESSION['user_id']]);
+        if (!in_array($timezone, $validTzs, true)) {
+            $errors[] = 'Invalid timezone.';
+        }
 
-        setFlash('success', 'Profile updated.');
-        header('Location: /profile.php');
-        exit;
+        if (empty($errors)) {
+            $stmt = $pdo->prepare('UPDATE users SET display_name = ?, timezone = ? WHERE id = ?');
+            $stmt->execute([$displayName, $timezone, (int) $_SESSION['user_id']]);
+
+            setFlash('success', 'Profile updated.');
+            header('Location: /profile.php');
+            exit;
+        }
     }
 }
 
@@ -81,7 +103,33 @@ ob_start();
         </select>
     </div>
 
+    <input type="hidden" name="action" value="">
     <button type="submit" class="btn btn-primary">Save changes</button>
+</form>
+</div>
+
+<div class="card mt-16">
+<h3>Change password</h3>
+<form method="POST" action="/profile.php">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+    <input type="hidden" name="action" value="change_password">
+
+    <div class="form-group">
+        <label for="current_password">Current password</label>
+        <input type="password" id="current_password" name="current_password" required>
+    </div>
+
+    <div class="form-group">
+        <label for="new_password">New password <span class="text-muted">(min 8 characters)</span></label>
+        <input type="password" id="new_password" name="new_password" required minlength="8">
+    </div>
+
+    <div class="form-group">
+        <label for="confirm_password">Confirm new password</label>
+        <input type="password" id="confirm_password" name="confirm_password" required minlength="8">
+    </div>
+
+    <button type="submit" class="btn btn-primary">Change password</button>
 </form>
 </div>
 <?php

@@ -132,3 +132,13 @@ CREATE TABLE IF NOT EXISTS summary_sent (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET foreign_key_checks = 1;
+
+CREATE TABLE IF NOT EXISTS password_resets (
+    id         INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id    INT UNSIGNED NOT NULL,
+    token      VARCHAR(64) NOT NULL UNIQUE,
+    created_at DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP()),
+    expires_at DATETIME NOT NULL,
+    used_at    DATETIME NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

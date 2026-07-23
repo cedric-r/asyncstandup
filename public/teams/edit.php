@@ -17,9 +17,7 @@ $teamId = (int) ($_GET['id'] ?? 0);
 $team   = getTeamById($pdo, $teamId);
 
 if ($team === null || !isTeamOwner($pdo, $teamId, (int) $_SESSION['user_id'])) {
-    http_response_code(403);
-    echo 'Forbidden';
-    exit;
+    forbid();
 }
 
 $errors = [];

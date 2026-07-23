@@ -151,3 +151,113 @@ function setFlash(string $type, string $text): void
 {
     $_SESSION['flash'] = ['type' => $type, 'text' => $text];
 }
+
+/**
+ * Send HTTP 403 Forbidden and exit.
+ *
+ * Used as a one-liner access guard across all page controllers.
+ */
+function forbid(): never
+{
+    http_response_code(403);
+    echo 'Forbidden';
+    exit;
+}
+
+/**
+ * Verify the current password and update to a new one if it matches.
+ *
+ * @param string $current Plain-text current password for verification.
+ * @param string $new     Plain-text new password (caller must validate min length).
+ * @return bool True if password updated; false if current password was wrong.
+ */
+function changePassword(PDO $pdo, int $userId, string $current, string $new): bool
+{
+    $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch();
+
+    if ($row === false || !password_verify($current, $row['password_hash'])) {
+        return false;
+    }
+
+    $hash = password_hash($new, PASSWORD_BCRYPT);
+    $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+        ->execute([$hash, $userId]);
+
+    return true;
+}
+
+/**
+ * Generate a password reset token and insert it into password_resets.
+ *
+ * @return string 64-char hex token.
+ */
+function createPasswordResetToken(PDO $pdo, int $userId, ?DateTimeImmutable $now = null): string
+{
+    $token     = bin2hex(random_bytes(32));
+    $now     ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    $expiresAt = $now->modify('+1 hour')->format('Y-m-d H:i:s');
+
+    $pdo->prepare('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)')
+        ->execute([$userId, $token, $expiresAt]);
+
+    return $token;
+}
+
+/**
+ * Find a password reset token row by token string.
+ *
+ * Returns the row or null if not found. Caller validates expiry and used_at.
+ */
+function findValidResetToken(PDO $pdo, string $token): ?array
+{
+    $stmt = $pdo->prepare('SELECT * FROM password_resets WHERE token = ?');
+    $stmt->execute([$token]);
+    $row = $stmt->fetch();
+
+    return $row !== false ? $row : null;
+}
+
+/**
+ * Apply a password reset: update the user's password and mark the token used.
+ *
+ * Wrapped in a transaction — both updates succeed or neither does.
+ * The token is claimed atomically via `used_at IS NULL` — concurrent requests
+ * will see rowCount() = 0 and the function returns false without updating
+ * the password.
+ *
+ * @return bool True if password was reset; false if token was already used
+ *              by a concurrent request.
+ */
+function applyPasswordReset(PDO $pdo, int $tokenId, int $userId, string $newPassword): bool
+{
+    $hash = password_hash($newPassword, PASSWORD_BCRYPT);
+    $ts   = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+
+    $pdo->beginTransaction();
+
+    try {
+        // Atomically claim the token — fails if already used (concurrent request).
+        $stmt = $pdo->prepare(
+            'UPDATE password_resets SET used_at = ? WHERE id = ? AND used_at IS NULL'
+        );
+        $stmt->execute([$ts, $tokenId]);
+
+        if ($stmt->rowCount() === 0) {
+            $pdo->rollBack();
+
+            return false; // Token already consumed by a concurrent request.
+        }
+
+        $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+            ->execute([$hash, $userId]);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+
+    return true;
+}

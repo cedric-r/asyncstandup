@@ -17,9 +17,12 @@ $orgId = (int) ($_GET['id'] ?? 0);
 $org   = getOrgById($pdo, $orgId);
 
 if ($org === null || !isOrgMember($pdo, $orgId, (int) $_SESSION['user_id'])) {
-    http_response_code(403);
-    echo 'Forbidden';
-    exit;
+    forbid();
+}
+
+// US-11: only the org creator may delete.
+if (!isOrgCreator($pdo, $orgId, (int) $_SESSION['user_id'])) {
+    forbid();
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
