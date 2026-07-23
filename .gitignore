@@ -1,0 +1,5 @@
+config/config.php
+logs/*.log
+vendor/
+.phpunit.result.cache
+*.DS_Store

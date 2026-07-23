@@ -1,0 +1,164 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Return true if team's summary time (standup_time + 1 hour) is within 60 s of nowUtc.
+ */
+function isSummaryDue(array $team, DateTimeImmutable $nowUtc): bool
+{
+    $teamTz   = new DateTimeZone($team['timezone']);
+    $nowLocal = $nowUtc->setTimezone($teamTz);
+
+    $scheduledLocal = DateTimeImmutable::createFromFormat(
+        'Y-m-d H:i',
+        $nowLocal->format('Y-m-d') . ' ' . substr((string) $team['standup_time'], 0, 5),
+        $teamTz
+    );
+
+    if ($scheduledLocal === false) {
+        return false;
+    }
+
+    $summaryLocal = $scheduledLocal->modify('+1 hour');
+    $summaryUtc   = $summaryLocal->setTimezone(new DateTimeZone('UTC'));
+    $diff         = abs($nowUtc->getTimestamp() - $summaryUtc->getTimestamp());
+
+    return $diff < 60;
+}
+
+/**
+ * Attempt to claim the summary_sent slot for this team + date.
+ *
+ * Uses INSERT IGNORE as the dedup guard. Returns true only if the row was newly
+ * inserted — false means a summary was already sent (or is being sent concurrently).
+ */
+function attemptInsertSummaryLock(PDO $pdo, int $teamId, string $sendDate): bool
+{
+    $stmt = $pdo->prepare(
+        'INSERT IGNORE INTO summary_sent (team_id, send_date, sent_at) VALUES (?, ?, UTC_TIMESTAMP())'
+    );
+    $stmt->execute([$teamId, $sendDate]);
+
+    return $stmt->rowCount() > 0;
+}
+
+/**
+ * Assemble summary data: developers, questions, and answer map.
+ */
+function assembleSummaryData(PDO $pdo, int $teamId, string $sendDate): array
+{
+    // All developer members.
+    $devStmt = $pdo->prepare('
+        SELECT u.id, u.display_name, u.email
+        FROM team_members tm
+        JOIN users u ON u.id = tm.user_id
+        WHERE tm.team_id = ? AND tm.is_developer = 1
+        ORDER BY u.display_name
+    ');
+    $devStmt->execute([$teamId]);
+    $developers = $devStmt->fetchAll();
+
+    // Questions in order.
+    $qStmt = $pdo->prepare('SELECT id, question FROM team_questions WHERE team_id = ? ORDER BY position');
+    $qStmt->execute([$teamId]);
+    $questions = $qStmt->fetchAll();
+
+    // Submissions for today.
+    $subStmt = $pdo->prepare('
+        SELECT ss.user_id, a.question_id, a.answer
+        FROM standup_tokens t
+        JOIN standup_submissions ss ON ss.token_id = t.id
+        JOIN standup_answers a ON a.submission_id = ss.id
+        WHERE t.team_id = ? AND t.send_date = ?
+    ');
+    $subStmt->execute([$teamId, $sendDate]);
+    $submissions = $subStmt->fetchAll();
+
+    // Build answer map: $answerMap[$userId][$questionId] = answer.
+    $answerMap = [];
+
+    foreach ($submissions as $row) {
+        $answerMap[(int) $row['user_id']][(int) $row['question_id']] = (string) $row['answer'];
+    }
+
+    return [
+        'developers' => $developers,
+        'questions'  => $questions,
+        'answerMap'  => $answerMap,
+    ];
+}
+
+/**
+ * Send the daily summary email to all team recipients.
+ *
+ * Inserts summary_sent BEFORE sending to prevent double-send even if process crashes.
+ * AC-6: if no recipients, inserts summary_sent row and returns (no emails sent, no error).
+ */
+function sendSummaryEmail(PDO $pdo, array $config, array $team, string $sendDate, DateTimeImmutable $nowLocal): void
+{
+    $teamId = (int) $team['id'];
+
+    // Dedup guard — exit if already sent.
+    if (!attemptInsertSummaryLock($pdo, $teamId, $sendDate)) {
+        return;
+    }
+
+    // Load recipients.
+    $recStmt = $pdo->prepare('SELECT email, display_name FROM team_recipients WHERE team_id = ?');
+    $recStmt->execute([$teamId]);
+    $recipients = $recStmt->fetchAll();
+
+    if (empty($recipients)) {
+        return; // AC-6: no recipients — summary_sent row already inserted; no error.
+    }
+
+    $data         = assembleSummaryData($pdo, $teamId, $sendDate);
+    $developers   = $data['developers'];
+    $questions    = $data['questions'];
+    $answerMap    = $data['answerMap'];
+    $teamName     = $team['name'];
+
+    // Build submission + non-submitter lists.
+    $submitterData  = [];
+    $nonSubmitters  = [];
+
+    foreach ($developers as $dev) {
+        $devId = (int) $dev['id'];
+
+        if (isset($answerMap[$devId])) {
+            $answers = [];
+
+            foreach ($questions as $q) {
+                $answers[(int) $q['id']] = $answerMap[$devId][(int) $q['id']] ?? '';
+            }
+
+            $submitterData[] = [
+                'display_name' => $dev['display_name'] ?? $dev['email'],
+                'answers'      => $answers,
+            ];
+        } else {
+            $nonSubmitters[] = $dev['display_name'] ?? $dev['email'];
+        }
+    }
+
+    // Render email body.
+    ob_start();
+    extract(compact('teamName', 'sendDate', 'questions', 'submitterData', 'nonSubmitters'), EXTR_SKIP);
+    include __DIR__ . '/../templates/email/standup_summary.php';
+    $body = (string) ob_get_clean();
+
+    $subject = "AsyncStandUp Summary — {$teamName} ({$sendDate})";
+
+    foreach ($recipients as $recipient) {
+        $to       = str_replace(["\r", "\n"], ' ', (string) $recipient['email']);
+        $toName   = str_replace(["\r", "\n"], ' ', (string) ($recipient['display_name'] ?? $to));
+
+        try {
+            sendMail($config, $to, $toName, $subject, $body);
+        } catch (RuntimeException $e) {
+            $line = date('Y-m-d H:i:s') . ' [ERROR] [Summary] Team ' . $teamId . ' recipient ' . $to . ': ' . $e->getMessage() . PHP_EOL;
+            file_put_contents(__DIR__ . '/../logs/standup-errors.log', $line, FILE_APPEND | LOCK_EX);
+        }
+    }
+}
