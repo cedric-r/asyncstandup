@@ -50,6 +50,7 @@ $currentUser = getCurrentUser($pdo);
 
 ob_start();
 ?>
+<p class="back-link"><a href="/orgs/index.php">&larr; Back to organisations</a></p>
 <h1 class="page-title">Edit Organisation</h1>
 
 <?php foreach ($errors as $err): ?>

@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../src/Db.php';
 require_once __DIR__ . '/../../src/Auth.php';
 require_once __DIR__ . '/../../src/Csrf.php';
 require_once __DIR__ . '/../../src/TeamRepository.php';
+require_once __DIR__ . '/../../src/OrgRepository.php';
 
 startSession();
 requireLogin();
@@ -56,8 +57,15 @@ $flash       = getFlash();
 $currentUser = getCurrentUser($pdo);
 $questions   = getQuestions($pdo, $teamId);
 
+$org      = getOrgById($pdo, (int) $team['org_id']);
+$orgId    = (int) $team['org_id'];
+$orgName  = (string) ($org['name'] ?? '');
+$teamName = (string) $team['name'];
+$currentPage = 'questions';
+
 ob_start();
 ?>
+<?php include __DIR__ . '/../../templates/team-nav.php'; ?>
 <h1 class="page-title">Questions — <?= htmlspecialchars($team['name'], ENT_QUOTES, 'UTF-8') ?></h1>
 
 <div class="card">

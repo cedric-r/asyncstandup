@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../src/Db.php';
 require_once __DIR__ . '/../../src/Auth.php';
 require_once __DIR__ . '/../../src/Csrf.php';
 require_once __DIR__ . '/../../src/TeamRepository.php';
+require_once __DIR__ . '/../../src/OrgRepository.php';
 require_once __DIR__ . '/../../src/StandupEmailer.php';
 require_once __DIR__ . '/../../src/DashboardRepository.php';
 
@@ -159,8 +160,15 @@ $viewLabels = [
     'single'    => 'Date: ' . ($dateFilter ?? '') . ' — Member: ' . ($memberFilter !== null ? ($memberMap[$memberFilter] ?? '?') : ''),
 ];
 
+$org      = getOrgById($pdo, (int) $team['org_id']);
+$orgId    = (int) $team['org_id'];
+$orgName  = (string) ($org['name'] ?? '');
+$teamName = (string) $team['name'];
+$currentPage = 'responses';
+
 ob_start();
 ?>
+<?php include __DIR__ . '/../../templates/team-nav.php'; ?>
 <h1 class="page-title">Standup Responses — <?= htmlspecialchars($team['name'], ENT_QUOTES, 'UTF-8') ?></h1>
 
 <div class="card">

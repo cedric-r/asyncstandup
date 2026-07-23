@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../src/Db.php';
 require_once __DIR__ . '/../../src/Auth.php';
 require_once __DIR__ . '/../../src/Csrf.php';
 require_once __DIR__ . '/../../src/TeamRepository.php';
+require_once __DIR__ . '/../../src/OrgRepository.php';
 
 startSession();
 requireLogin();
@@ -52,8 +53,15 @@ $flash       = getFlash();
 $currentUser = getCurrentUser($pdo);
 $members     = getTeamMembers($pdo, $teamId);
 
+$org      = getOrgById($pdo, (int) $team['org_id']);
+$orgId    = (int) $team['org_id'];
+$orgName  = (string) ($org['name'] ?? '');
+$teamName = (string) $team['name'];
+$currentPage = 'members';
+
 ob_start();
 ?>
+<?php include __DIR__ . '/../../templates/team-nav.php'; ?>
 <h1 class="page-title">Members — <?= htmlspecialchars($team['name'], ENT_QUOTES, 'UTF-8') ?></h1>
 <a href="/invitations/send.php?team_id=<?= (int) $teamId ?>" class="btn btn-primary">+ Invite member</a>
 
@@ -100,6 +108,9 @@ ob_start();
         </form>
     </td>
     <td>
+        <?php if ($isOwner && $m['is_developer']): ?>
+        <a href="/teams/responses.php?team_id=<?= (int) $teamId ?>&amp;member_id=<?= (int) $m['id'] ?>" class="btn btn-secondary btn-sm">View responses</a>
+        <?php endif; ?>
         <?php if ((int) $m['id'] !== (int) $_SESSION['user_id']): ?>
         <form method="POST" action="/teams/members.php?team_id=<?= (int) $teamId ?>" style="display:inline">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">

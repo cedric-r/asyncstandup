@@ -40,6 +40,7 @@ $currentUser = getCurrentUser($pdo);
 
 ob_start();
 ?>
+<p class="back-link"><a href="/orgs/index.php">&larr; Back to organisations</a></p>
 <h1 class="page-title">Delete Organisation</h1>
 
 <div class="card">

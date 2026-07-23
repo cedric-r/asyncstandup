@@ -404,3 +404,56 @@ Phase 11 (password reset)
     - [ ] Non-owner visits responses.php → 403
     - [ ] Invalid date format → error message shown; no crash
     - [ ] Commit: `git commit -m "feat(us-12): standup response browser"`
+
+---
+
+## Phase 13: Navigation Improvements (US-13)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+### Tasks
+66. Add/verify `getTeamById()` and `getOrgById()` helpers
+    - [ ] Check `TeamRepository.php` and `OrgRepository.php` for existing implementations
+    - [ ] Add if absent: `getTeamById(PDO, int $teamId): ?array` and `getOrgById(PDO, int $orgId): ?array`
+
+67. Add `h()` helper to shared location
+    - [ ] Define `function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }` in `src/View.php` (if not already present)
+    - [ ] Verify not redefined elsewhere; remove duplicates
+
+68. Create `templates/team-nav.php`
+    - [ ] Accepts variables: `$currentPage`, `$teamId`, `$orgId`, `$teamName`, `$orgName`, `$isOwner`
+    - [ ] Renders: breadcrumb (Organisations → Org Name → Team Name) + `<ul class="team-nav-links">` with conditional owner links
+    - [ ] Active page: `class="active"` on `<li>` matching `$currentPage`
+    - [ ] Uses `h()` for all output; all URLs with `(int)` IDs
+    - [ ] No access control logic — pure rendering
+
+69. Update `public/assets/style.css` ⚠️ **Path B — additive**
+    - [ ] Create file if absent; add `<link>` in `templates/layout/header.php` if not already present
+    - [ ] Add `.breadcrumb`, `.team-nav`, `.team-nav-links`, `.team-nav-links li.active a`, `.back-link` CSS rules per US-13 STORY.md
+
+70. Include `team-nav.php` in all 7 team pages ⚠️ **Path B — additive**
+    - [ ] `teams/edit.php` — set `$currentPage = 'edit'`; load `$team`, `$org`, `$isOwner`; include team-nav
+    - [ ] `teams/members.php` — set `$currentPage = 'members'`; include team-nav
+    - [ ] `teams/questions.php` — set `$currentPage = 'questions'`; include team-nav
+    - [ ] `teams/recipients.php` — set `$currentPage = 'recipients'`; include team-nav
+    - [ ] `teams/dashboard.php` — set `$currentPage = 'dashboard'`; include team-nav
+    - [ ] `teams/responses.php` — set `$currentPage = 'responses'`; include team-nav
+    - [ ] Verify `$teamId`, `$team['org_id']`, `$teamName`, `$orgName`, `$isOwner` all available before include on each page
+
+71. Add "View responses" links to `public/teams/members.php` ⚠️ **Path B — additive**
+    - [ ] In member list render loop, for `is_developer = 1` members, add `<a href="/teams/responses.php?team_id=...&member_id=...">View responses</a>` inside `<?php if ($isOwner): ?>` conditional
+
+72. Add per-team action links to `public/teams/index.php` ⚠️ **Path B — additive**
+    - [ ] For each team in list: always show Dashboard link; additionally show Members / Questions / Recipients / Settings / Responses links inside `if ($t['is_owner'])` block
+    - [ ] Verify `$t['is_owner']` present in the team list query (JOIN with `team_members` for current user)
+
+73. Add back link to org edit and delete pages ⚠️ **Path B — additive**
+    - [ ] `public/orgs/edit.php`: add `<p class="back-link"><a href="/orgs/index.php">&larr; Back to organisations</a></p>` before form
+    - [ ] `public/orgs/delete.php`: same back link
+
+74. Manual verification
+    - [ ] Visit each of the 7 team pages as owner — team nav visible; correct link highlighted as active
+    - [ ] Visit `teams/members.php` as owner — developer members have "View responses" links; non-developer members do not
+    - [ ] Visit `teams/members.php` as non-owner — no "View responses" links
+    - [ ] Visit `teams/index.php` as owner — all action links visible; as member — only Dashboard shown
+    - [ ] Visit `orgs/edit.php` and `orgs/delete.php` — back link visible and working
+    - [ ] Commit: `git commit -m "feat(us-13): navigation improvements and team nav bar"`

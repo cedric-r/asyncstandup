@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../src/Db.php';
 require_once __DIR__ . '/../../src/Auth.php';
 require_once __DIR__ . '/../../src/Csrf.php';
 require_once __DIR__ . '/../../src/TeamRepository.php';
+require_once __DIR__ . '/../../src/OrgRepository.php';
 
 startSession();
 requireLogin();
@@ -54,8 +55,15 @@ $csrfToken   = generateCsrfToken();
 $flash       = getFlash();
 $currentUser = getCurrentUser($pdo);
 
+$org      = getOrgById($pdo, (int) $team['org_id']);
+$orgId    = (int) $team['org_id'];
+$orgName  = (string) ($org['name'] ?? '');
+$teamName = (string) $team['name'];
+$currentPage = 'edit';
+
 ob_start();
 ?>
+<?php include __DIR__ . '/../../templates/team-nav.php'; ?>
 <h1 class="page-title">Team Settings — <?= htmlspecialchars($team['name'], ENT_QUOTES, 'UTF-8') ?></h1>
 
 <?php foreach ($errors as $err): ?>

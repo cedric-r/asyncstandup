@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../src/Auth.php';
 require_once __DIR__ . '/../../src/Csrf.php';
 require_once __DIR__ . '/../../src/TeamRepository.php';
 require_once __DIR__ . '/../../src/DashboardRepository.php';
+require_once __DIR__ . '/../../src/OrgRepository.php';
 
 startSession();
 requireLogin();
@@ -70,8 +71,15 @@ function pctStr(array $stats, int $userId): string
     return $pct . '%';
 }
 
+$org      = getOrgById($pdo, (int) $team['org_id']);
+$orgId    = (int) $team['org_id'];
+$orgName  = (string) ($org['name'] ?? '');
+$teamName = (string) $team['name'];
+$currentPage = 'dashboard';
+
 ob_start();
 ?>
+<?php include __DIR__ . '/../../templates/team-nav.php'; ?>
 <h1 class="page-title"><?= htmlspecialchars($team['name'], ENT_QUOTES, 'UTF-8') ?> Dashboard</h1>
 <p class="text-muted">Last 7 days · <?= htmlspecialchars($team['timezone'], ENT_QUOTES, 'UTF-8') ?></p>
 

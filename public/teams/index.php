@@ -45,14 +45,16 @@ ob_start();
     <td><?= htmlspecialchars(substr($team['standup_time'], 0, 5), ENT_QUOTES, 'UTF-8') ?></td>
     <td><?= htmlspecialchars($team['timezone'], ENT_QUOTES, 'UTF-8') ?></td>
     <td class="actions">
-        <?php if (isTeamOwner($pdo, (int) $team['id'], (int) $_SESSION['user_id'])): ?>
+        <?php $isTOwner = isTeamOwner($pdo, (int) $team['id'], (int) $_SESSION['user_id']); ?>
+        <?php if ($isTOwner): ?>
         <a href="/teams/dashboard.php?team_id=<?= (int) $team['id'] ?>" class="btn btn-secondary btn-sm">Dashboard</a>
-        <?php endif; ?>
-        <a href="/teams/edit.php?id=<?= (int) $team['id'] ?>" class="btn btn-secondary btn-sm">Settings</a>
         <a href="/teams/members.php?team_id=<?= (int) $team['id'] ?>" class="btn btn-secondary btn-sm">Members</a>
         <a href="/teams/questions.php?team_id=<?= (int) $team['id'] ?>" class="btn btn-secondary btn-sm">Questions</a>
         <a href="/teams/recipients.php?team_id=<?= (int) $team['id'] ?>" class="btn btn-secondary btn-sm">Recipients</a>
+        <a href="/teams/edit.php?id=<?= (int) $team['id'] ?>" class="btn btn-secondary btn-sm">Settings</a>
+        <a href="/teams/responses.php?team_id=<?= (int) $team['id'] ?>" class="btn btn-secondary btn-sm">Responses</a>
         <a href="/teams/delete.php?id=<?= (int) $team['id'] ?>" class="btn btn-danger btn-sm">Delete</a>
+        <?php endif; ?>
     </td>
 </tr>
 <?php endforeach; ?>

@@ -153,3 +153,26 @@ Applied to: `acceptInvitationForUser()`, `createPasswordResetToken()`. Apply to 
 2. **Double-escaping trap** — store raw values in intermediate variables; escape once at the render site; never pre-escape and re-escape.
 3. **Additive Path B waiver is correct** — appending a new function and adding one link require no characterisation; document this decision in the commit message.
 4. **PLAN-AMENDMENT = user approval always** — Autonomous mode does not bypass amendment approval; treat amendments as Gate D-equivalent stops.
+
+---
+
+# RETRO addendum — US-13: Navigation Improvements
+
+**Branch**: `feature/asyncstandup-navigation` → `main`
+**Review cycles**: 1 (CLEAN PASS) | **Plan amendments**: 0
+
+## What went well
+
+- CLEAN PASS on Cycle 1 — additive-only navigation changes (require_once additions, variable assignments, include calls, link additions) produced zero regressions and required no amendments.
+- Caller contract for `team-nav.php` documented in the partial itself via PHPDoc-style `@var` annotations — reviewer accepted this.
+- All 7 team pages integrated in a single implementation commit with consistent variable naming and `$currentPage` explicit string constants.
+- `$isOwner` derived from `isTeamOwner()` in every calling page — same function used for access control and nav rendering; no inconsistency possible.
+- `teams/index.php` action cell restructured to be fully owner-gated in one block — simpler and more secure than the previous mix of gated/ungated links.
+
+## Lessons learned (US-13)
+
+1. **Shared template partials need a documented caller contract** — `team-nav.php` requires 6 variables set before include (`$teamId`, `$orgId`, `$teamName`, `$orgName`, `$isOwner`, `$currentPage`). Document each at the top of the partial with PHPDoc-style `@var` blocks. Without this, future developers adding the nav to a new page will silently receive null/undefined errors in PHP 8.x with no guidance.
+
+2. **`h()` helper belongs in `src/` from Phase 0** — centralising `htmlspecialchars(ENT_QUOTES, 'UTF-8')` in a single named function would have eliminated 100+ repetitive inline calls across all 13 stories. Add `src/View.php` with `h()` to the standard scaffold in every new PHP project. Cost: 10 lines. Savings: readability + typo prevention across all output sites.
+
+3. **Additive Path B = no characterisation required** — appending a new function, adding a `require_once`, or inserting one link do not change existing logic. Characterisation is for cases where existing code is modified. Document this reasoning explicitly in commit messages so reviewers don't flag it unnecessarily.
