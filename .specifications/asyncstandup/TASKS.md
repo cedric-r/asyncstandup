@@ -490,3 +490,38 @@ Phase 11 (password reset)
 79. Commit
     - [ ] `git add src/SummaryEmailer.php src/StandupEmailer.php public/submit.php templates/email/standup_prompt.php cron/send_standups.php`
     - [ ] `git commit -m "fix(us-14): summary recipients, org/team context, weekend skip, double config load"`
+
+---
+
+## Phase 15: Text-Based CAPTCHA (US-15)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+### Tasks
+80. Create `config/captcha_questions.php`
+    - [ ] 50 questions in the format `['q' => '...', 'a' => [...]]` per US-15 STORY.md question bank
+    - [ ] Verify count: `count(require 'config/captcha_questions.php') === 50`
+    - [ ] Varied categories: arithmetic, days/months, colours, animal legs, nature, planets, word facts
+    - [ ] Numeric answers include word alternatives (e.g. `['4', 'four']`)
+
+81. Create `src/Captcha.php`
+    - [ ] `captchaLoadQuestions(): array` — `require` the question file
+    - [ ] `captchaGetRandomQuestion(): array` — `random_int()` index; store in `$_SESSION['captcha_idx']`; return `['idx' => int, 'question' => string]`
+    - [ ] `captchaValidate(string $userInput): bool` — check session idx present (false if missing); `unset` idx unconditionally; load questions; `in_array(strtolower(trim($input)), array_map('strtolower', $answers), true)`
+
+82. Modify `public/register.php` ⚠️ **Path B**
+    - [ ] GET: `require_once 'src/Captcha.php'`; call `captchaGetRandomQuestion()`; pass `$captcha['question']` to template
+    - [ ] POST: after CSRF check, call `captchaValidate($_POST['captcha_answer'] ?? '')`; on false: add error, call `captchaGetRandomQuestion()` for new question, render form with errors; do NOT proceed to user creation
+    - [ ] Add CAPTCHA input field to register form (`name="captcha_answer"`, `autocomplete="off"`, `type="text"`)
+
+83. Modify `public/login.php` ⚠️ **Path B**
+    - [ ] Same pattern as register: GET generates question; POST validates before any DB lookup
+    - [ ] Add CAPTCHA field to login form
+    - [ ] On captcha fail: new question; error message; no password verification attempted
+
+84. Verify and commit
+    - [ ] Test: correct answer (both numeric and word form) → form proceeds
+    - [ ] Test: wrong answer → error shown; new question displayed; no login/register executed
+    - [ ] Test: empty field → treated as wrong
+    - [ ] Test: POST with no prior GET (no session idx) → treated as wrong
+    - [ ] Test: same question not reused after failure (session idx cleared)
+    - [ ] `git commit -m "feat(us-15): text-based CAPTCHA on login and register"`

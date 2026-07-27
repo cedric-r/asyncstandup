@@ -219,3 +219,26 @@ Applied to: `acceptInvitationForUser()`, `createPasswordResetToken()`. Apply to 
 1. **Pre-list test files in IMPL-PLAN** — if the story adds a new `src/` PDO function, `tests/RepositoryTest.php` goes in the file list; the Test Validator requirement is predictable, not emergent.
 2. **Role flags must be wired to the actual send list at implementation time** — `is_recipient=1` on `team_members` existed since US-3 but was never connected to the summary send loop; audit role flags against their intended uses at implementation time.
 3. **`require_once` always at file scope** — never inside function bodies; declare all module dependencies at the top of the file.
+
+---
+
+# RETRO addendum — US-15: Text-Based CAPTCHA
+
+**Branch**: `feature/asyncstandup-captcha` → `main`
+**Review cycles**: 1 (CLEAN PASS) | **Plan amendments**: 0
+
+## What went well
+
+- CLEAN PASS on Cycle 1 — no amendments, no review findings. Pure PHP file + session-only state = no scope surprises.
+- Validation order (CSRF → CAPTCHA → form logic) implemented correctly on first attempt.
+- `random_int()` (not `rand()`) used as required; `unset()` in `captchaValidate()` enforces the one-attempt policy correctly.
+- Missing session index returns `false` immediately (replay protection) — no DB access on any invalid path.
+- Correctly pre-noted in READY FOR REVIEW that Test Validator may require tests for pure functions, and offered a PLAN-AMENDMENT path proactively.
+
+## Lessons learned (US-15)
+
+1. **Session-dependent functions are not blocking for tests** — `captchaGetRandomQuestion()` and `captchaValidate()` read/write `$_SESSION`, which PHPUnit doesn’t initialise. This is the same constraint as `validateCsrfToken()` (already untested for the same reason). Document explicitly in future IMPL-PLANs: “This function requires an active session — not unit-testable without session mocking; consistent with `validateCsrfToken()` precedent.”
+
+2. **Extract a pure inner function for partial testability** — `captchaValidate()` mixes session access (impure) with answer matching (pure). Extracting `captchaCheckAnswer(int $idx, string $userInput): bool` as a pure function would make the matching logic directly testable without any session. Recommend extracting in a follow-up story.
+
+3. **Pure PHP file + session-only state = no scope surprises** — `src/Captcha.php` adds no DB tables, no new DB queries, and no external services. When implementation exactly matches the spec (spec-driven development), amendments are not needed. Keep spec detail level high for future stories.
