@@ -222,6 +222,55 @@ Applied to: `acceptInvitationForUser()`, `createPasswordResetToken()`. Apply to 
 
 ---
 
+# RETRO addendum — US-16 + US-17: Account Deletion + Admin Role
+
+**Branch**: `feature/asyncstandup-admin` → `main`
+**Review cycles**: 2 | **Plan amendments**: 2 (PA-7, PA-8)
+
+## What went well
+
+- `deleteUserAccount()` transaction cascade correct on first implementation — all 9 steps in FK-safe order, including the non-obvious `organisations.created_by` / `teams.created_by` nullification (spec gap caught and filled before first review).
+- Admin self-de-admin protection implemented correctly first attempt.
+- `loginUser()` return-type change from `bool` to `string` was the right design — avoids callers having to re-query the DB for account status.
+- 43 tests, 90 assertions, 0 warnings after Cycle 2 fixes.
+
+## What caused review cycles
+
+### PA-7: `templates/email/admin_new_registration.php` not in IMPL-PLAN
+
+**What happened**: New requirement added during implementation (admin notification email). Template file created without first adding it to the IMPL-PLAN. PLAN-AMENDMENT raised but incorrectly self-approved — reviewer correctly flagged that all PLAN-AMENDMENT files require user approval.
+
+**Lesson**: PLAN-AMENDMENT files always require user approval. Even when the change is small, additive, and directed by Team Lead, the amendment status must remain PENDING until the user explicitly approves.
+
+### PA-8: `tests/schema-sqlite.sql` not in IMPL-PLAN
+
+**What happened**: `db/schema.sql` was changed (new columns, nullable FKs) and `tests/schema-sqlite.sql` was updated to mirror it — but the test schema file was not listed in the IMPL-PLAN file list.
+
+**Root cause**: The now-established pattern is that any story that modifies `db/schema.sql` also modifies `tests/schema-sqlite.sql`. This is predictable, not emergent.
+
+**Lesson**: **Pre-list `tests/schema-sqlite.sql` in every IMPL-PLAN that modifies `db/schema.sql`.** The two files are coupled — schema changes always require a test schema update. Add to IMPL-PLAN authoring checklist: “If `db/schema.sql` is in the file list, add `tests/schema-sqlite.sql` too.”
+
+### Cycle 1 MINOR: `reject` action missing `password_resets` cleanup
+
+**What happened**: `admin/users.php` reject action did `DELETE FROM users` without first deleting `password_resets` rows. A pending user who submitted a forgot-password request before rejection would cause a FK constraint violation.
+
+**Lesson**: Any `DELETE FROM users` outside of `deleteUserAccount()` must follow the same cleanup pattern. The `deleteUserAccount()` function documents the 9-step cascade. Any other code path that deletes a user row must either call `deleteUserAccount()` or replicate the relevant cleanup steps. Document in code comments.
+
+### Cycle 1 MAJOR: `loginUser()` return-type change (bool → string) — no tests
+
+**What happened**: Changing `loginUser()` from `bool` to `string` is a breaking contract change — no tests covered the 4 return values. Callers (`login.php`, pending invite flow) were updated but the test coverage was missing.
+
+**Lesson**: **Changing a function’s return type is a breaking contract change** — always update tests in the same commit. Pre-list the test file (e.g. `tests/RepositoryTest.php`) in the IMPL-PLAN when a function signature changes.
+
+## Lessons learned (US-16/17 summary)
+
+1. **Pre-list `tests/schema-sqlite.sql` whenever `db/schema.sql` is listed** — the files are coupled; the omission is now a known avoidable pattern.
+2. **Any `DELETE FROM users` must clean up `password_resets` first** — follow the `deleteUserAccount()` cascade; document this in new code comments.
+3. **`loginUser()` return-type change requires test updates** — pre-list the test file; breaking contract changes = test updates in the same commit.
+4. **`session_regenerate_id()` must be guarded by `session_status()`** — prevents PHPUnit warnings in CLI; add to project PHP coding standards.
+
+---
+
 # RETRO addendum — US-15: Text-Based CAPTCHA
 
 **Branch**: `feature/asyncstandup-captcha` → `main`

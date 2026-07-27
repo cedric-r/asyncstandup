@@ -16,12 +16,25 @@ $user = getCurrentUser($pdo);
 
 $errors = [];
 
+require_once __DIR__ . '/../src/View.php';
+
 $action = $_POST['action'] ?? '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     validateCsrfToken($_POST['csrf_token'] ?? '');
 
-    if ($action === 'change_password') {
+    if ($action === 'delete_account') {
+        // Account deletion form.
+        $confirmPw = $_POST['confirm_password'] ?? '';
+
+        if (deleteUserAccount($pdo, (int) $_SESSION['user_id'], $confirmPw)) {
+            session_destroy();
+            header('Location: /login.php?deleted=1');
+            exit;
+        }
+
+        $errors[] = 'Incorrect password.';
+    } elseif ($action === 'change_password') {
         // Change-password sub-form.
         $currentPw  = $_POST['current_password'] ?? '';
         $newPw      = $_POST['new_password'] ?? '';
@@ -130,6 +143,21 @@ ob_start();
     </div>
 
     <button type="submit" class="btn btn-primary">Change password</button>
+</form>
+</div>
+
+<div class="card mt-16" style="border:1px solid #ef9a9a">
+<h3 style="color:#c62828">Danger Zone</h3>
+<p class="text-muted mt-8">Permanently delete your account. Your standup submissions are retained for team records.</p>
+<form method="POST" action="/profile.php" class="mt-16">
+    <input type="hidden" name="csrf_token" value="<?= h($_SESSION['csrf_token'] ?? generateCsrfToken()) ?>">
+    <input type="hidden" name="action" value="delete_account">
+    <div class="form-group">
+        <label for="confirm_password_delete">Confirm your password to delete account</label>
+        <input type="password" id="confirm_password_delete" name="confirm_password" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="btn btn-danger"
+            onclick="return confirm('This is permanent. Are you sure?')">Delete my account</button>
 </form>
 </div>
 <?php

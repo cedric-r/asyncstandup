@@ -525,3 +525,89 @@ Phase 11 (password reset)
     - [ ] Test: POST with no prior GET (no session idx) → treated as wrong
     - [ ] Test: same question not reused after failure (session idx cleared)
     - [ ] `git commit -m "feat(us-15): text-based CAPTCHA on login and register"`
+
+---
+
+## Phase 16: Delete Own Account (US-16)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+### Tasks
+85. Update `db/schema.sql` — nullable user_id columns ⚠️ **Path B — additive schema change**
+    - [ ] Modify `CREATE TABLE standup_submissions`: change `user_id INT UNSIGNED NOT NULL` → `INT UNSIGNED NULL`
+    - [ ] Modify `CREATE TABLE standup_tokens`: change `user_id INT UNSIGNED NOT NULL` → `INT UNSIGNED NULL`
+    - [ ] Add ALTER TABLE statements in a migration note comment for existing deployments
+    - [ ] Verify FK constraint retained; only nullability changed
+
+86. Add `deleteUserAccount(PDO $pdo, int $userId, string $passwordInput): bool` to `src/Auth.php` ⚠️ **Path B — additive**
+    - [ ] Fetch user; `password_verify()` — return `false` if mismatch
+    - [ ] Open transaction
+    - [ ] `UPDATE standup_submissions SET user_id = NULL WHERE user_id = ?`
+    - [ ] `UPDATE standup_tokens      SET user_id = NULL WHERE user_id = ?`
+    - [ ] `DELETE FROM team_members  WHERE user_id = ?`
+    - [ ] `DELETE FROM org_members   WHERE user_id = ?`
+    - [ ] `DELETE FROM invitations   WHERE invited_by = ?`
+    - [ ] `DELETE FROM password_resets WHERE user_id = ?`
+    - [ ] `DELETE FROM users WHERE id = ?`
+    - [ ] Commit; return `true`; catch + rollback + rethrow on exception
+
+87. Add delete account section to `public/profile.php` ⚠️ **Path B — additive**
+    - [ ] Add `<hr>` + `<section class="delete-account">` below existing profile form
+    - [ ] POST handler for `?action=delete`: validate CSRF → call `deleteUserAccount()` → on success: `session_destroy()`; redirect `/register.php?deleted=1`; on fail: error "Incorrect password."
+    - [ ] In `public/register.php`: detect `?deleted=1`; show flash "Your account has been deleted."
+
+88. Verify and commit
+    - [ ] Test: correct password → submissions/tokens retain NULL user_id; user deleted; session destroyed; redirect with flash
+    - [ ] Test: wrong password → error; user still exists; still logged in
+    - [ ] Test: empty password → same as wrong
+    - [ ] `git commit -m "feat(us-16): account self-deletion with password confirmation"`
+
+---
+
+## Phase 17: Admin Role + Registration Approval (US-17)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+### Tasks
+89. Update `db/schema.sql` — add `is_admin` and `account_status` to users ⚠️ **Path B — additive schema change**
+    - [ ] Add `is_admin TINYINT(1) NOT NULL DEFAULT 0` and `account_status VARCHAR(10) NOT NULL DEFAULT 'pending'` to `CREATE TABLE users`
+    - [ ] Add migration note comment: `ALTER TABLE users ADD COLUMN is_admin...; ADD COLUMN account_status...; UPDATE users SET account_status = 'approved';`
+
+90. Update `src/Auth.php` ⚠️ **Path B — additive functions + login modification**
+    - [ ] Add `requireAdmin(): void` — `requireLogin()` + check `$_SESSION['is_admin']`; call `forbid()` if not
+    - [ ] Modify login flow: after password verify success, check `account_status`; show distinct messages for `pending` and `rejected`; set `$_SESSION['is_admin']` on approved login
+    - [ ] Modify register flow: after INSERT, do NOT start session; show pending message instead of auto-login
+
+91. Update `public/login.php` ⚠️ **Path B — pending/rejected message display**
+    - [ ] Render `$errors[]` including status-based messages from `Auth.php`; no code change if errors array already rendered
+
+92. Update `public/register.php` ⚠️ **Path B — no auto-login after register**
+    - [ ] After successful INSERT: remove session-start + redirect-to-dashboard; replace with pending message display or redirect to `/login.php` with flash
+
+93. Create `templates/email/account_approved.php`
+    - [ ] Variables: `$user_name`, `$login_url`, `$app_name`
+    - [ ] `$subject = "Your {$app_name} account has been approved";`
+    - [ ] Plain-text body: greeting; approval notice; `$login_url`
+
+94. Create `public/admin/users.php`
+    - [ ] `requireAdmin()` at top
+    - [ ] Load users sorted: pending → approved → rejected; ORDER BY CASE + created_at DESC
+    - [ ] Render table: email, display_name, account_status, is_admin badge, created_at, action buttons
+    - [ ] POST handlers (all with CSRF, all on same page via `?action=`)
+      - [ ] `approve`: `UPDATE users SET account_status='approved' WHERE id=?`; send approval email via `Mailer::send()`
+      - [ ] `reject`: `DELETE FROM users WHERE id=? AND account_status='pending'` (guard against approving+rejecting); flash "User rejected and removed."
+      - [ ] `toggle_admin`: check `(int)$_POST['user_id'] !== (int)$_SESSION['user_id']`; flip `is_admin`; error if self
+    - [ ] Redirect back to `admin/users.php` after each action (PRG)
+
+95. Create `public/admin/index.php` — redirect to `users.php`
+
+96. Update `README.md` — document first-admin setup
+    - [ ] MySQL command: `UPDATE users SET is_admin=1, account_status='approved' WHERE email='...'`
+    - [ ] SQLite equivalent
+    - [ ] Note: existing-user migration ALTER TABLE steps
+
+97. Verify and commit
+    - [ ] Test: register → pending message; cannot log in
+    - [ ] Test: admin approves → user can now log in; approval email sent
+    - [ ] Test: admin rejects → user record deleted; email freed (re-register possible)
+    - [ ] Test: non-admin visits `/admin/users.php` → 403
+    - [ ] Test: admin tries to toggle own admin flag → error; flag unchanged
+    - [ ] `git commit -m "feat(us-17): admin role, registration approval, user management"`

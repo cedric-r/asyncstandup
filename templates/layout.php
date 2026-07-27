@@ -15,6 +15,9 @@
     <a href="/orgs/index.php">Organisations</a>
     <?php if (isset($currentUser)): ?>
     <span class="nav-right">
+        <?php if (!empty($_SESSION['is_admin'])): ?>
+        <a href="/admin/users.php">Admin</a>
+        <?php endif; ?>
         <a href="/profile.php"><?= htmlspecialchars($currentUser['display_name'] ?? $currentUser['email'], ENT_QUOTES, 'UTF-8') ?></a>
         <a href="/logout.php">Log out</a>
     </span>

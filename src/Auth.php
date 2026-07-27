@@ -72,28 +72,41 @@ function getCurrentUser(PDO $pdo): ?array
 /**
  * Attempt to log in a user by email and password.
  *
- * On success, sets $_SESSION['user_id'] and regenerates the session ID.
- *
- * @return bool True on successful authentication.
+ * Returns a status string:
+ *   'ok'       — login successful; session set
+ *   'invalid'  — wrong email or wrong password (generic; no enumeration)
+ *   'pending'  — account awaiting admin approval
+ *   'rejected' — account not approved (edge case; rejected users are deleted)
  */
-function loginUser(PDO $pdo, string $email, string $password): bool
+function loginUser(PDO $pdo, string $email, string $password): string
 {
-    $stmt = $pdo->prepare('SELECT id, password_hash FROM users WHERE email = ?');
+    $stmt = $pdo->prepare('SELECT id, password_hash, is_admin, account_status FROM users WHERE email = ?');
     $stmt->execute([mb_strtolower(trim($email))]);
     $row = $stmt->fetch();
 
-    if ($row === false) {
-        return false;
+    if ($row === false || !password_verify($password, $row['password_hash'])) {
+        return 'invalid'; // Generic — never reveal whether email exists.
     }
 
-    if (!password_verify($password, $row['password_hash'])) {
-        return false;
+    $status = (string) $row['account_status'];
+
+    if ($status === 'pending') {
+        return 'pending';
     }
 
-    $_SESSION['user_id'] = (int) $row['id'];
-    session_regenerate_id(true);
+    if ($status === 'rejected') {
+        return 'rejected';
+    }
 
-    return true;
+    // Approved — start session.
+    $_SESSION['user_id']  = (int) $row['id'];
+    $_SESSION['is_admin'] = (bool) $row['is_admin'];
+    // Guard for CLI/test context where no session is active.
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_regenerate_id(true);
+    }
+
+    return 'ok';
 }
 
 /**
@@ -252,6 +265,76 @@ function applyPasswordReset(PDO $pdo, int $tokenId, int $userId, string $newPass
 
         $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
             ->execute([$hash, $userId]);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+
+    return true;
+}
+
+/**
+ * Require the current user to be an administrator.
+ *
+ * Calls requireLogin() first (redirects unauthenticated users to login).
+ * Then checks $_SESSION['is_admin'] — calls forbid() (HTTP 403) if not admin.
+ */
+function requireAdmin(): void
+{
+    requireLogin();
+
+    if (empty($_SESSION['is_admin'])) {
+        forbid();
+    }
+}
+
+/**
+ * Delete a user account after password confirmation.
+ *
+ * All cascade steps run in a single transaction. Submissions and tokens are
+ * preserved with user_id = NULL for team archival. Orgs/teams created by this
+ * user have their created_by set to NULL and are NOT deleted.
+ *
+ * Returns false if the password is wrong (no DB changes made).
+ */
+function deleteUserAccount(PDO $pdo, int $userId, string $passwordInput): bool
+{
+    $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    $user = $stmt->fetch();
+
+    if ($user === false || !password_verify($passwordInput, $user['password_hash'])) {
+        return false;
+    }
+
+    $pdo->beginTransaction();
+
+    try {
+        // Nullify archival references (preserve team history).
+        $pdo->prepare('UPDATE standup_submissions SET user_id    = NULL WHERE user_id    = ?')->execute([$userId]);
+        $pdo->prepare('UPDATE standup_tokens      SET user_id    = NULL WHERE user_id    = ?')->execute([$userId]);
+
+        // Nullify created_by on orgs/teams (orgs and teams survive; creator info cleared).
+        $pdo->prepare('UPDATE organisations       SET created_by = NULL WHERE created_by = ?')->execute([$userId]);
+        $pdo->prepare('UPDATE teams               SET created_by = NULL WHERE created_by = ?')->execute([$userId]);
+
+        // team_recipients.added_by is a nullable FK — must NULL before user DELETE.
+        $pdo->prepare('UPDATE team_recipients     SET added_by   = NULL WHERE added_by   = ?')->execute([$userId]);
+
+        // Remove membership records.
+        $pdo->prepare('DELETE FROM team_members    WHERE user_id   = ?')->execute([$userId]);
+        $pdo->prepare('DELETE FROM org_members     WHERE user_id   = ?')->execute([$userId]);
+
+        // Remove invitations sent by this user.
+        $pdo->prepare('DELETE FROM invitations     WHERE invited_by = ?')->execute([$userId]);
+
+        // Remove password reset tokens.
+        $pdo->prepare('DELETE FROM password_resets WHERE user_id   = ?')->execute([$userId]);
+
+        // Finally delete the user row.
+        $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
 
         $pdo->commit();
     } catch (Throwable $e) {

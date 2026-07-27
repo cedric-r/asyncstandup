@@ -6,6 +6,8 @@ require_once __DIR__ . '/../src/Db.php';
 require_once __DIR__ . '/../src/Auth.php';
 require_once __DIR__ . '/../src/Csrf.php';
 require_once __DIR__ . '/../src/Captcha.php';
+require_once __DIR__ . '/../src/Mailer.php';
+require_once __DIR__ . '/../src/View.php'; // renderEmailTemplate()
 
 $config = require __DIR__ . '/../config/config.php';
 
@@ -49,18 +51,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (empty($errors)) {
             try {
-                $userId = registerUser($pdo, $email, $password, $displayName);
-                $_SESSION['user_id'] = $userId;
-                session_regenerate_id(true);
+                registerUser($pdo, $email, $password, $displayName);
 
-                // If registration came from an invitation, auto-accept.
-                if ($invite !== '') {
-                    require_once __DIR__ . '/../src/InvitationRepository.php';
-                    acceptInvitationForUser($pdo, $invite, $userId);
+                // US-17: notify all admins of the new pending registration.
+                $adminStmt = $pdo->query("SELECT email, display_name FROM users WHERE is_admin = 1 AND account_status = 'approved'");
+                $admins    = $adminStmt->fetchAll();
+
+                if (!empty($admins)) {
+                    $adminUrl  = rtrim($config['app_url'], '/') . '/admin/users.php';
+                    $appName   = $config['app_name'] ?? 'AsyncStandUp';
+
+                    $body = renderEmailTemplate(
+                        __DIR__ . '/../templates/email/admin_new_registration.php',
+                        [
+                            'new_user_name'  => $displayName ?: $email,
+                            'new_user_email' => $email,
+                            'admin_url'      => $adminUrl,
+                            'app_name'       => $appName,
+                        ]
+                    );
+
+                    $subject = "[{$appName}] New registration awaiting approval";
+
+                    foreach ($admins as $admin) {
+                        try {
+                            sendMail($config, $admin['email'], $admin['display_name'] ?? $admin['email'], $subject, $body);
+                        } catch (RuntimeException $e) {
+                            error_log('[AsyncStandUp] admin notification email failed: ' . $e->getMessage());
+                        }
+                    }
                 }
 
-                setFlash('success', 'Welcome! Your account has been created.');
-                header('Location: /dashboard.php');
+                // No auto-login. New accounts require admin approval.
+                header('Location: /login.php?registered=1');
                 exit;
             } catch (PDOException $e) {
                 if ($e->getCode() === '23000') {

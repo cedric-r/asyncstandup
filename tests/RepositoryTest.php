@@ -470,4 +470,111 @@ class RepositoryTest extends TestCase
         self::assertContains('ext2@test.com', $emails);
         self::assertContains('member2@test.com', $emails);
     }
+
+    // =========================================================================
+    // deleteUserAccount() (US-16)
+    // =========================================================================
+
+    public function testDeleteUserAccountCorrectPasswordDeletesUserAndPreservesSubmissions(): void
+    {
+        $userId = seedUser($this->pdo, 'delme@test.com', 'Del Me');
+        $orgId  = seedOrg($this->pdo, $userId);
+        $teamId = seedTeam($this->pdo, $orgId, $userId);
+        seedTeamMember($this->pdo, $teamId, $userId, 1, 1);
+
+        // Seed a question, token, and submission.
+        $this->pdo->exec("INSERT INTO team_questions (team_id, question, position) VALUES ({$teamId}, 'Q?', 1)");
+        $qId = (int) $this->pdo->lastInsertId();
+
+        $this->pdo->prepare('
+            INSERT INTO standup_tokens (team_id, user_id, token, send_date, sent_at, expires_at, used_at)
+            VALUES (?, ?, ?, ?, datetime("now"), datetime("now","+48 hours"), datetime("now"))
+        ')->execute([$teamId, $userId, 'del-tok', '2024-01-15']);
+        $tokenId = (int) $this->pdo->lastInsertId();
+
+        $this->pdo->prepare('INSERT INTO standup_submissions (token_id, user_id, team_id) VALUES (?, ?, ?)')
+            ->execute([$tokenId, $userId, $teamId]);
+        $subId = (int) $this->pdo->lastInsertId();
+
+        $this->pdo->prepare('INSERT INTO standup_answers (submission_id, question_id, answer) VALUES (?, ?, ?)')
+            ->execute([$subId, $qId, 'My answer']);
+
+        // Delete the account.
+        $result = deleteUserAccount($this->pdo, $userId, 'password');
+
+        self::assertTrue($result, 'deleteUserAccount must return true on correct password');
+
+        // User row must be gone.
+        $userRow = $this->pdo->query("SELECT id FROM users WHERE id = {$userId}")->fetch();
+        self::assertFalse($userRow, 'User row must be deleted');
+
+        // Submission must be preserved with user_id = NULL.
+        $subRow = $this->pdo->query("SELECT user_id FROM standup_submissions WHERE id = {$subId}")->fetch();
+        self::assertNotFalse($subRow, 'standup_submissions row must be preserved');
+        self::assertNull($subRow['user_id'], 'standup_submissions.user_id must be NULL after deletion');
+
+        // team_members + org_members must be gone.
+        $tmCount = (int) $this->pdo->query("SELECT COUNT(*) FROM team_members WHERE user_id = {$userId}")->fetchColumn();
+        self::assertSame(0, $tmCount, 'team_members rows must be deleted');
+
+        $omCount = (int) $this->pdo->query("SELECT COUNT(*) FROM org_members WHERE user_id = {$userId}")->fetchColumn();
+        self::assertSame(0, $omCount, 'org_members rows must be deleted');
+    }
+
+    public function testDeleteUserAccountWrongPasswordReturnsFalse(): void
+    {
+        $userId = seedUser($this->pdo, 'nodelmee@test.com', 'No Del');
+
+        $result = deleteUserAccount($this->pdo, $userId, 'wrongpassword');
+
+        self::assertFalse($result, 'deleteUserAccount must return false on wrong password');
+
+        $userRow = $this->pdo->query("SELECT id FROM users WHERE id = {$userId}")->fetch();
+        self::assertNotFalse($userRow, 'User row must still exist after wrong-password attempt');
+    }
+
+    // =========================================================================
+    // loginUser() — return contract tests (US-17 changed bool -> string)
+    // =========================================================================
+
+    public function testLoginUserApprovedReturnsOk(): void
+    {
+        $userId = seedUser($this->pdo, 'approved@test.com', 'Approved');
+        // Default status is 'pending' — explicitly approve.
+        $this->pdo->exec("UPDATE users SET account_status = 'approved' WHERE id = {$userId}");
+
+        $result = loginUser($this->pdo, 'approved@test.com', 'password');
+
+        self::assertSame('ok', $result);
+    }
+
+    public function testLoginUserWrongPasswordReturnsInvalid(): void
+    {
+        $userId = seedUser($this->pdo, 'wrongpw@test.com', 'WrongPw');
+        $this->pdo->exec("UPDATE users SET account_status = 'approved' WHERE id = {$userId}");
+
+        $result = loginUser($this->pdo, 'wrongpw@test.com', 'not-the-password');
+
+        self::assertSame('invalid', $result);
+    }
+
+    public function testLoginUserPendingReturnsPending(): void
+    {
+        // seedUser() sets default account_status='pending' — no UPDATE needed.
+        seedUser($this->pdo, 'pending@test.com', 'Pending');
+
+        $result = loginUser($this->pdo, 'pending@test.com', 'password');
+
+        self::assertSame('pending', $result);
+    }
+
+    public function testLoginUserRejectedReturnsRejected(): void
+    {
+        $userId = seedUser($this->pdo, 'rejected@test.com', 'Rejected');
+        $this->pdo->exec("UPDATE users SET account_status = 'rejected' WHERE id = {$userId}");
+
+        $result = loginUser($this->pdo, 'rejected@test.com', 'password');
+
+        self::assertSame('rejected', $result);
+    }
 }

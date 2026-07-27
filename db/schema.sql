@@ -6,18 +6,20 @@ SET NAMES utf8mb4;
 SET foreign_key_checks = 0;
 
 CREATE TABLE IF NOT EXISTS users (
-    id            INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    email         VARCHAR(255) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
-    display_name  VARCHAR(100),
-    timezone      VARCHAR(50) NOT NULL DEFAULT 'UTC',
-    created_at    DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP())
+    id             INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    email          VARCHAR(255) NOT NULL UNIQUE,
+    password_hash  VARCHAR(255) NOT NULL,
+    display_name   VARCHAR(100),
+    timezone       VARCHAR(50)  NOT NULL DEFAULT 'UTC',
+    is_admin       TINYINT(1)   NOT NULL DEFAULT 0,
+    account_status VARCHAR(10)  NOT NULL DEFAULT 'pending',
+    created_at     DATETIME     NOT NULL DEFAULT (UTC_TIMESTAMP())
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS organisations (
     id          INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     name        VARCHAR(255) NOT NULL,
-    created_by  INT UNSIGNED NOT NULL,
+    created_by  INT UNSIGNED NULL,
     created_at  DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP()),
     FOREIGN KEY (created_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -36,7 +38,7 @@ CREATE TABLE IF NOT EXISTS teams (
     name         VARCHAR(255) NOT NULL,
     timezone     VARCHAR(50) NOT NULL,
     standup_time TIME NOT NULL,
-    created_by   INT UNSIGNED NOT NULL,
+    created_by   INT UNSIGNED NULL,
     created_at   DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP()),
     FOREIGN KEY (org_id)     REFERENCES organisations(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
@@ -91,7 +93,7 @@ CREATE TABLE IF NOT EXISTS invitations (
 CREATE TABLE IF NOT EXISTS standup_tokens (
     id         INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     team_id    INT UNSIGNED NOT NULL,
-    user_id    INT UNSIGNED NOT NULL,
+    user_id    INT UNSIGNED NULL,
     token      VARCHAR(64) NOT NULL UNIQUE,
     send_date  DATE NOT NULL,
     sent_at    DATETIME NOT NULL,
@@ -105,7 +107,7 @@ CREATE TABLE IF NOT EXISTS standup_tokens (
 CREATE TABLE IF NOT EXISTS standup_submissions (
     id           INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     token_id     INT UNSIGNED NOT NULL UNIQUE,
-    user_id      INT UNSIGNED NOT NULL,
+    user_id      INT UNSIGNED NULL,
     team_id      INT UNSIGNED NOT NULL,
     submitted_at DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP()),
     FOREIGN KEY (token_id) REFERENCES standup_tokens(id),
@@ -142,3 +144,22 @@ CREATE TABLE IF NOT EXISTS password_resets (
     used_at    DATETIME NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================================
+-- Migration: US-16 + US-17 (run on existing deployments)
+-- ============================================================================
+
+-- US-16: make user_id nullable on archival tables (submissions/tokens survive
+--        user deletion); make created_by nullable on orgs/teams.
+ALTER TABLE standup_submissions MODIFY user_id INT UNSIGNED NULL;
+ALTER TABLE standup_tokens      MODIFY user_id INT UNSIGNED NULL;
+ALTER TABLE organisations       MODIFY created_by INT UNSIGNED NULL;
+ALTER TABLE teams               MODIFY created_by INT UNSIGNED NULL;
+
+-- US-17: add admin flag + account status to users.
+ALTER TABLE users
+    ADD COLUMN is_admin       TINYINT(1)  NOT NULL DEFAULT 0,
+    ADD COLUMN account_status VARCHAR(10) NOT NULL DEFAULT 'pending';
+
+-- Approve all existing users so they are not locked out after migration.
+UPDATE users SET account_status = 'approved' WHERE account_status = 'pending';

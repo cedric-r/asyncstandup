@@ -43,6 +43,21 @@ Run every minute on the application server:
 * * * * * php /path/to/standup/cron/send_standups.php >> /path/to/standup/logs/cron.log 2>&1
 ```
 
+## First-admin setup
+
+New registrations require administrator approval. After creating your first account and running the schema migration, grant admin status manually:
+
+**MySQL:**
+```sql
+UPDATE users SET is_admin = 1, account_status = 'approved' WHERE email = 'your@email.com';
+```
+
+Then log in and use `/admin/users.php` to approve or reject subsequent registrations.
+
+**Session admin flag**: the `is_admin` session flag is set at login time. Changes to the flag take effect on the user's next login — existing sessions are not invalidated.
+
+---
+
 ## Security Notes
 
 - `config/config.php` is gitignored — never commit real credentials

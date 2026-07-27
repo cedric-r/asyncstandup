@@ -11,18 +11,20 @@
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS users (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    email         TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    display_name  TEXT,
-    timezone      TEXT NOT NULL DEFAULT 'UTC',
-    created_at    TEXT NOT NULL DEFAULT ''
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    email          TEXT NOT NULL UNIQUE,
+    password_hash  TEXT NOT NULL,
+    display_name   TEXT,
+    timezone       TEXT NOT NULL DEFAULT 'UTC',
+    is_admin       INTEGER NOT NULL DEFAULT 0,
+    account_status TEXT NOT NULL DEFAULT 'pending',
+    created_at     TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS organisations (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL,
-    created_by  INTEGER NOT NULL,
+    created_by  INTEGER NULL,
     created_at  TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
@@ -41,7 +43,7 @@ CREATE TABLE IF NOT EXISTS teams (
     name         TEXT NOT NULL,
     timezone     TEXT NOT NULL,
     standup_time TEXT NOT NULL,
-    created_by   INTEGER NOT NULL,
+    created_by   INTEGER NULL,
     created_at   TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (org_id)     REFERENCES organisations(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
@@ -96,7 +98,7 @@ CREATE TABLE IF NOT EXISTS invitations (
 CREATE TABLE IF NOT EXISTS standup_tokens (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     team_id    INTEGER NOT NULL,
-    user_id    INTEGER NOT NULL,
+    user_id    INTEGER NULL,
     token      TEXT NOT NULL UNIQUE,
     send_date  TEXT NOT NULL,
     sent_at    TEXT NOT NULL,
@@ -110,7 +112,7 @@ CREATE TABLE IF NOT EXISTS standup_tokens (
 CREATE TABLE IF NOT EXISTS standup_submissions (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     token_id     INTEGER NOT NULL UNIQUE,
-    user_id      INTEGER NOT NULL,
+    user_id      INTEGER NULL,
     team_id      INTEGER NOT NULL,
     submitted_at TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (token_id) REFERENCES standup_tokens(id),

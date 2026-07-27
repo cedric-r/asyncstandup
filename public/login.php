@@ -29,8 +29,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $email    = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
+        $result   = loginUser($pdo, $email, $password);
 
-        if (loginUser($pdo, $email, $password)) {
+        if ($result === 'ok') {
             // AC-3: if an invitation was pending, auto-accept it on login.
             if (!empty($_SESSION['pending_invite_token'])) {
                 require_once __DIR__ . '/../src/InvitationRepository.php';
@@ -44,15 +45,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             header('Location: /dashboard.php');
             exit;
+        } elseif ($result === 'pending') {
+            $error = 'Your account is awaiting administrator approval.';
+        } elseif ($result === 'rejected') {
+            $error = 'Your account was not approved. Please contact the administrator.';
+        } else {
+            $error = 'Invalid email or password.';
         }
-
-        $error = 'Invalid email or password.';
     }
 }
 
 $csrfToken = generateCsrfToken();
 $flash     = getFlash();
 $captcha   = captchaGetRandomQuestion();
+
+// Show pending message after registration (US-17).
+if (isset($_GET['registered'])) {
+    $flash = ['type' => 'success', 'text' => 'Account created. Your registration is pending administrator approval. You will receive an email when approved.'];
+}
+
+// Show deletion message after account deleted (US-16).
+if (isset($_GET['deleted'])) {
+    $flash = ['type' => 'success', 'text' => 'Your account has been deleted.'];
+}
 
 ob_start();
 ?>
