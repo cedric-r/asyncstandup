@@ -176,3 +176,46 @@ Applied to: `acceptInvitationForUser()`, `createPasswordResetToken()`. Apply to 
 2. **`h()` helper belongs in `src/` from Phase 0** — centralising `htmlspecialchars(ENT_QUOTES, 'UTF-8')` in a single named function would have eliminated 100+ repetitive inline calls across all 13 stories. Add `src/View.php` with `h()` to the standard scaffold in every new PHP project. Cost: 10 lines. Savings: readability + typo prevention across all output sites.
 
 3. **Additive Path B = no characterisation required** — appending a new function, adding a `require_once`, or inserting one link do not change existing logic. Characterisation is for cases where existing code is modified. Document this reasoning explicitly in commit messages so reviewers don't flag it unnecessarily.
+
+---
+
+# RETRO addendum — US-14: Bug Fixes and Improvements
+
+**Branch**: `feature/asyncstandup-fixes` → `main`
+**Review cycles**: 3 | **Plan amendments**: 1 (PLAN-AMENDMENT-6)
+
+## What went well
+
+- All 4 fixes (Bug 1, Feature 2, Feature 3, Bug 4) implemented correctly on first commit — no functional findings from Code Reviewer or Security Auditor.
+- `getMergedRecipients()` deduplication logic (case-insensitive `strtolower(trim())`) was correct on first implementation.
+- Weekend skip using `format('N')` (ISO 8601, 6=Sat, 7=Sun) was correct — the brief’s note about `format('w')` ambiguity was heeded.
+- `require_once` dependency fix (Option A — file scope) accepted by Code Reviewer immediately.
+
+## What caused review cycles
+
+### Cycle 1 + Cycle 2/3 — PLAN-AMENDMENT-6: RepositoryTest.php not in IMPL-PLAN
+
+**What happened**: The Test Validator flagged `getMergedRecipients()` as having no tests (MAJOR). Tests were added to `tests/RepositoryTest.php` — a file created in US-9 and not listed in the US-14 IMPL-PLAN. This triggered a stop for PLAN-AMENDMENT-6.
+
+**Root cause**: The IMPL-PLAN was written without including `tests/RepositoryTest.php` in the file list, even though:
+1. US-14 adds a new PDO-injectable `src/` function (`getMergedRecipients()`)
+2. The RETRO from US-9/US-10 explicitly states: “Once the PHPUnit harness exists, new `src/` functions require tests”
+3. The established precedent (US-12 Cycle 1, US-10 Cycle 1) shows the Test Validator WILL require tests
+
+**Lesson**: **Always pre-list `tests/RepositoryTest.php` (or the appropriate test file) in the IMPL-PLAN when the story adds any new `src/` function with PDO parameters.** This is now a known requirement — it is not “emerging during review”, it is predictable. Treat test file additions as mandatory deliverables, not reactive fixes.
+
+**Prevention**: Add to IMPL-PLAN authoring checklist: “For every new function in `src/` that takes a PDO parameter, list the relevant test file in the file list and add at least 2 test cases to the test plan.”
+
+### Code Reviewer MINOR: `require_once` inside function body
+
+**What happened**: `require_once __DIR__ . '/../src/OrgRepository.php'` was placed inside `sendStandupPrompt()`. Functionally correct (idempotent) but hides the dependency.
+
+**Fix**: Moved to file scope at the top of `StandupEmailer.php`. This is the correct PHP convention for module-level dependencies.
+
+**Lesson**: **`require_once` belongs at file scope** — always declare module dependencies at the top of the file, never inside a function. In-function loading is valid PHP but misleads static analysis and developers reading the file.
+
+## Lessons learned (US-14 summary)
+
+1. **Pre-list test files in IMPL-PLAN** — if the story adds a new `src/` PDO function, `tests/RepositoryTest.php` goes in the file list; the Test Validator requirement is predictable, not emergent.
+2. **Role flags must be wired to the actual send list at implementation time** — `is_recipient=1` on `team_members` existed since US-3 but was never connected to the summary send loop; audit role flags against their intended uses at implementation time.
+3. **`require_once` always at file scope** — never inside function bodies; declare all module dependencies at the top of the file.

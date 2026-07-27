@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/OrgRepository.php';
+
 /**
  * Return all active teams from the DB.
  */
@@ -114,8 +116,12 @@ function sendStandupPrompt(PDO $pdo, array $config, array $team, array $member, 
     $teamName     = $team['name'];
     $teamTimezone = $team['timezone'];
 
+    // Load org name for email subject and body (Feature 2).
+    $orgRow  = getOrgById($pdo, (int) $team['org_id']);
+    $orgName = $orgRow['name'] ?? '';
+
     ob_start();
-    extract(compact('userName', 'teamName', 'standupUrl', 'sendDate', 'teamTimezone', 'questions'), EXTR_SKIP);
+    extract(compact('userName', 'teamName', 'orgName', 'standupUrl', 'sendDate', 'teamTimezone', 'questions'), EXTR_SKIP);
     include __DIR__ . '/../templates/email/standup_prompt.php';
     $body = (string) ob_get_clean();
 
@@ -123,7 +129,7 @@ function sendStandupPrompt(PDO $pdo, array $config, array $team, array $member, 
         $config,
         $member['email'],
         $userName,
-        "AsyncStandUp — {$teamName} standup for {$sendDate}",
+        "[{$orgName}] {$teamName} — Daily Standup for {$sendDate}",
         $body
     );
 }

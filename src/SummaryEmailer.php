@@ -95,6 +95,47 @@ function assembleSummaryData(PDO $pdo, int $teamId, string $sendDate): array
  * Inserts summary_sent BEFORE sending to prevent double-send even if process crashes.
  * AC-6: if no recipients, inserts summary_sent row and returns (no emails sent, no error).
  */
+/**
+ * Return the merged, deduplicated list of summary email recipients.
+ *
+ * Unions external recipients (team_recipients table) with team members who have
+ * is_recipient = 1. Deduplication is case-insensitive (strtolower + trim).
+ *
+ * @return array{email: string, display_name: string|null}[]
+ */
+function getMergedRecipients(PDO $pdo, int $teamId): array
+{
+    // External recipients.
+    $stmt = $pdo->prepare('SELECT email, display_name FROM team_recipients WHERE team_id = ?');
+    $stmt->execute([$teamId]);
+    $external = $stmt->fetchAll();
+
+    // Member recipients (is_recipient = 1).
+    $stmt2 = $pdo->prepare('
+        SELECT u.email, u.display_name
+        FROM team_members tm
+        JOIN users u ON u.id = tm.user_id
+        WHERE tm.team_id = ? AND tm.is_recipient = 1
+    ');
+    $stmt2->execute([$teamId]);
+    $members = $stmt2->fetchAll();
+
+    // Merge and deduplicate case-insensitively.
+    $seen   = [];
+    $merged = [];
+
+    foreach (array_merge($external, $members) as $r) {
+        $key = strtolower(trim((string) $r['email']));
+
+        if (!isset($seen[$key])) {
+            $seen[$key] = true;
+            $merged[]   = $r;
+        }
+    }
+
+    return $merged;
+}
+
 function sendSummaryEmail(PDO $pdo, array $config, array $team, string $sendDate, DateTimeImmutable $nowLocal): void
 {
     $teamId = (int) $team['id'];
@@ -104,10 +145,8 @@ function sendSummaryEmail(PDO $pdo, array $config, array $team, string $sendDate
         return;
     }
 
-    // Load recipients.
-    $recStmt = $pdo->prepare('SELECT email, display_name FROM team_recipients WHERE team_id = ?');
-    $recStmt->execute([$teamId]);
-    $recipients = $recStmt->fetchAll();
+    // Load merged recipients: external (team_recipients) + member recipients (is_recipient=1).
+    $recipients = getMergedRecipients($pdo, $teamId);
 
     if (empty($recipients)) {
         return; // AC-6: no recipients — summary_sent row already inserted; no error.

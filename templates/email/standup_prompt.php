@@ -4,6 +4,7 @@
  *
  * Variables provided by extract():
  * @var string   $userName
+ * @var string   $orgName
  * @var string   $teamName
  * @var string   $standupUrl
  * @var string   $sendDate
@@ -13,7 +14,8 @@
 ?>
 Hi <?= $userName ?>,
 
-It's time for the <?= $teamName ?> standup (<?= $sendDate ?>, <?= $teamTimezone ?>).
+Your daily standup for: <?= $orgName ?> / <?= $teamName ?>
+Date: <?= $sendDate ?> (<?= $teamTimezone ?>)
 
 Please submit your update by clicking the link below:
 

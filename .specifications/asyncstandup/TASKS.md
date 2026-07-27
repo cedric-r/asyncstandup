@@ -457,3 +457,36 @@ Phase 11 (password reset)
     - [ ] Visit `teams/index.php` as owner — all action links visible; as member — only Dashboard shown
     - [ ] Visit `orgs/edit.php` and `orgs/delete.php` — back link visible and working
     - [ ] Commit: `git commit -m "feat(us-13): navigation improvements and team nav bar"`
+
+---
+
+## Phase 14: Bug Fixes and Improvements (US-14)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+### Tasks
+75. Fix Bug 4 first — double config load in `cron/send_standups.php` ⚠️ **Path B**
+    - [ ] Locate orphan `require_once __DIR__ . '/../config/config.php'` line
+    - [ ] Delete it; retain only `$config = require __DIR__ . '/../config/config.php'`
+    - [ ] Verify cron still loads `$config` correctly (echo a config key in a test run)
+
+76. Fix Bug 1 — summary email recipients in `src/SummaryEmailer.php` ⚠️ **Path B**
+    - [ ] Add `queryMemberRecipients(PDO $pdo, int $teamId): array` function — SELECT email + display_name for `is_recipient = 1` members via JOIN with `users`
+    - [ ] Add `getMergedRecipients(PDO $pdo, int $teamId): array` function — merges external + member lists; dedup by `strtolower(trim($email))`
+    - [ ] Replace existing single-source recipient query call with `getMergedRecipients()`
+    - [ ] Verify: seed a team member with `is_recipient = 1`; confirm they receive summary; seed same email in `team_recipients`; confirm only one email sent
+
+77. Implement Feature 3 — weekend skip in `cron/send_standups.php` ⚠️ **Path B**
+    - [ ] Inside team loop, after computing `$nowLocal`, add: `$dayOfWeek = (int) $nowLocal->format('N'); if ($dayOfWeek === 6 || $dayOfWeek === 7) { continue; }`
+    - [ ] Ensure check appears before any prompt or summary logic for the team
+    - [ ] Verify: set system clock to a Saturday (or mock date in test); confirm no tokens created, no emails sent
+
+78. Implement Feature 2 — org+team context on submission form
+    - [ ] **`public/submit.php`** ⚠️ **Path B**: after loading `$team`, call `getOrgById($pdo, $team['org_id'])` (add function to `OrgRepository.php` if absent); render `<div class="standup-context">` with org name + team name above questions; apply to form view, already-submitted view, and error views where team data is available
+    - [ ] **`src/StandupEmailer.php`** ⚠️ **Path B**: add `$org = getOrgById($pdo, $team['org_id'])` before building template vars; add `'org_name' => $org['name'] ?? ''` to vars array
+    - [ ] **`templates/email/standup_prompt.php`** ⚠️ **Path B**: update `$subject` to `"[{$org_name}] {$team_name} — Daily Standup for {$send_date}"`; add org/team line to body
+    - [ ] Verify: send a test prompt email; confirm org and team names appear in subject + body
+    - [ ] Verify: visit a submission link in browser; confirm org + team name visible above the form
+
+79. Commit
+    - [ ] `git add src/SummaryEmailer.php src/StandupEmailer.php public/submit.php templates/email/standup_prompt.php cron/send_standups.php`
+    - [ ] `git commit -m "fix(us-14): summary recipients, org/team context, weekend skip, double config load"`

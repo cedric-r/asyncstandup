@@ -385,4 +385,89 @@ class RepositoryTest extends TestCase
         $userRow = $this->pdo->query("SELECT password_hash FROM users WHERE id = {$userId}")->fetch();
         self::assertTrue(password_verify('password', $userRow['password_hash']), 'Password must not change on concurrent use');
     }
+
+    // =========================================================================
+    // getMergedRecipients()
+    // =========================================================================
+
+    private function seedRecipientFixture(): array
+    {
+        $ownerId = seedUser($this->pdo, 'owner-mr@test.com', 'Owner MR');
+        $orgId   = seedOrg($this->pdo, $ownerId);
+        $teamId  = seedTeam($this->pdo, $orgId, $ownerId);
+        seedTeamMember($this->pdo, $teamId, $ownerId, 1, 1);
+
+        return [$teamId, $ownerId];
+    }
+
+    public function testGetMergedRecipientsExternalOnly(): void
+    {
+        [$teamId] = $this->seedRecipientFixture();
+
+        $this->pdo->prepare('INSERT INTO team_recipients (team_id, email, display_name) VALUES (?, ?, ?)')
+            ->execute([$teamId, 'ext@test.com', 'External']);
+
+        $result = getMergedRecipients($this->pdo, $teamId);
+
+        self::assertCount(1, $result);
+        self::assertSame('ext@test.com', $result[0]['email']);
+    }
+
+    public function testGetMergedRecipientsMemberOnly(): void
+    {
+        [$teamId, $ownerId] = $this->seedRecipientFixture();
+
+        // Add a second user with is_recipient=1.
+        $recipientId = seedUser($this->pdo, 'member-recip@test.com', 'Member Recip');
+        $this->pdo->prepare(
+            'INSERT INTO team_members (team_id, user_id, is_owner, is_developer, is_recipient) VALUES (?, ?, 0, 0, 1)'
+        )->execute([$teamId, $recipientId]);
+
+        $result = getMergedRecipients($this->pdo, $teamId);
+
+        $emails = array_column($result, 'email');
+        self::assertContains('member-recip@test.com', $emails);
+    }
+
+    public function testGetMergedRecipientsCaseInsensitiveDeduplicate(): void
+    {
+        [$teamId] = $this->seedRecipientFixture();
+
+        // External recipient with mixed case.
+        $this->pdo->prepare('INSERT INTO team_recipients (team_id, email, display_name) VALUES (?, ?, ?)')
+            ->execute([$teamId, 'Shared@Test.COM', 'External']);
+
+        // Member recipient with same email in lowercase.
+        $memberId = seedUser($this->pdo, 'shared@test.com', 'Member');
+        $this->pdo->prepare(
+            'INSERT INTO team_members (team_id, user_id, is_owner, is_developer, is_recipient) VALUES (?, ?, 0, 0, 1)'
+        )->execute([$teamId, $memberId]);
+
+        $result = getMergedRecipients($this->pdo, $teamId);
+
+        // After case-insensitive dedup, only 1 entry should remain.
+        self::assertCount(1, $result, 'Same email in different cases must be deduplicated to 1 entry');
+    }
+
+    public function testGetMergedRecipientsBothNoOverlapReturnsMerged(): void
+    {
+        [$teamId] = $this->seedRecipientFixture();
+
+        // External recipient.
+        $this->pdo->prepare('INSERT INTO team_recipients (team_id, email, display_name) VALUES (?, ?, ?)')
+            ->execute([$teamId, 'ext2@test.com', 'Ext2']);
+
+        // Member recipient with a different email.
+        $memberId = seedUser($this->pdo, 'member2@test.com', 'Member2');
+        $this->pdo->prepare(
+            'INSERT INTO team_members (team_id, user_id, is_owner, is_developer, is_recipient) VALUES (?, ?, 0, 0, 1)'
+        )->execute([$teamId, $memberId]);
+
+        $result = getMergedRecipients($this->pdo, $teamId);
+
+        self::assertCount(2, $result, 'Two distinct emails from external + member should yield 2 entries');
+        $emails = array_column($result, 'email');
+        self::assertContains('ext2@test.com', $emails);
+        self::assertContains('member2@test.com', $emails);
+    }
 }
