@@ -710,4 +710,78 @@ class RepositoryTest extends TestCase
         $count  = count(array_filter($emails, fn($e) => strtolower($e) === 'shared-member@test.com'));
         self::assertSame(1, $count, 'Developer who is also is_recipient must appear exactly once');
     }
+
+    // =========================================================================
+    // isOrgOrTeamOwnerAnywhere() + isPureDeveloper() (US-22)
+    // =========================================================================
+
+    public function testOwnerAnywhere_AdminUser_ReturnsTrue(): void
+    {
+        $userId = seedUser($this->pdo, 'admin-oa@test.com', 'Admin OA');
+        $this->pdo->exec("UPDATE users SET is_admin = 1 WHERE id = {$userId}");
+
+        self::assertTrue(isOrgOrTeamOwnerAnywhere($this->pdo, $userId));
+        self::assertFalse(isPureDeveloper($this->pdo, $userId));
+    }
+
+    public function testOwnerAnywhere_OrgCreator_ReturnsTrue(): void
+    {
+        $userId = seedUser($this->pdo, 'orgcreator-oa@test.com', 'Org Creator OA');
+        seedOrg($this->pdo, $userId); // creates org with created_by = userId
+
+        self::assertTrue(isOrgOrTeamOwnerAnywhere($this->pdo, $userId));
+    }
+
+    public function testOwnerAnywhere_TeamOwner_ReturnsTrue(): void
+    {
+        $userId = seedUser($this->pdo, 'teamowner-oa@test.com', 'Team Owner OA');
+        $orgId  = seedOrg($this->pdo, $userId);
+        $teamId = seedTeam($this->pdo, $orgId, $userId);
+        seedTeamMember($this->pdo, $teamId, $userId, 1, 1); // is_owner=1
+
+        self::assertTrue(isOrgOrTeamOwnerAnywhere($this->pdo, $userId));
+    }
+
+    public function testPureDeveloper_MemberNoOwnership_ReturnsTrue(): void
+    {
+        // Owner seeds the org + team.
+        $ownerId = seedUser($this->pdo, 'owner-pd@test.com', 'Owner PD');
+        $orgId   = seedOrg($this->pdo, $ownerId);
+        $teamId  = seedTeam($this->pdo, $orgId, $ownerId);
+        seedTeamMember($this->pdo, $teamId, $ownerId, 1, 1);
+
+        // Developer member with is_owner=0.
+        $devId = seedUser($this->pdo, 'dev-pd@test.com', 'Dev PD');
+        seedTeamMember($this->pdo, $teamId, $devId, 0, 1); // is_owner=0
+
+        self::assertFalse(isOrgOrTeamOwnerAnywhere($this->pdo, $devId));
+        self::assertTrue(isPureDeveloper($this->pdo, $devId));
+    }
+
+    public function testPureDeveloper_NewUserNoMemberships_ReturnsFalse(): void
+    {
+        // Fresh user with zero team memberships — must NOT be pure developer
+        // (bootstrapping: they should be able to create their first org).
+        $userId = seedUser($this->pdo, 'newuser-pd@test.com', 'New User PD');
+
+        self::assertFalse(isOrgOrTeamOwnerAnywhere($this->pdo, $userId));
+        self::assertFalse(isPureDeveloper($this->pdo, $userId),
+            'New user with zero memberships must NOT be a pure developer');
+    }
+
+    public function testPureDeveloper_OwnerOnOneTeamDevOnAnother_ReturnsFalse(): void
+    {
+        // User is owner on team A and developer on team B → still an owner somewhere.
+        $ownerId  = seedUser($this->pdo, 'mixed-owner@test.com', 'Mixed Owner');
+        $orgId    = seedOrg($this->pdo, $ownerId);
+        $teamIdA  = seedTeam($this->pdo, $orgId, $ownerId);
+        $teamIdB  = seedTeam($this->pdo, $orgId, $ownerId);
+        seedTeamMember($this->pdo, $teamIdA, $ownerId, 1, 1); // is_owner=1
+        seedTeamMember($this->pdo, $teamIdB, $ownerId, 0, 1); // is_owner=0
+
+        self::assertTrue(isOrgOrTeamOwnerAnywhere($this->pdo, $ownerId),
+            'Owner on at least one team must return true');
+        self::assertFalse(isPureDeveloper($this->pdo, $ownerId),
+            'User with owner role on any team is not a pure developer');
+    }
 }

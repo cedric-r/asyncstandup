@@ -12,16 +12,19 @@ require_once __DIR__ . '/../../src/OrgRepository.php';
 startSession();
 requireLogin();
 
-$pdo         = getDb($config);
-$currentUser = getCurrentUser($pdo);
-$flash       = getFlash();
-$orgs        = getOrgsForUser($pdo, (int) $_SESSION['user_id']);
+$pdo             = getDb($config);
+$isPureDeveloper = isPureDeveloper($pdo, (int) $_SESSION['user_id']);
+$currentUser     = getCurrentUser($pdo);
+$flash           = getFlash();
+$orgs            = getOrgsForUser($pdo, (int) $_SESSION['user_id']);
 
 ob_start();
 ?>
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold text-gray-900">Organisations</h1>
+  <?php if (!$isPureDeveloper): ?>
   <a href="/orgs/create.php" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm">+ New Organisation</a>
+  <?php endif; ?>
 </div>
 
 <?php if (empty($orgs)): ?>

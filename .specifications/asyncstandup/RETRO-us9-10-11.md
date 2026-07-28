@@ -420,3 +420,24 @@ The initial implementation used `$hideNav = true` on auth/token pages (login, re
 2. **`DEFAULT 0` schema migrations need no UPDATE script** — when adding a boolean flag column that should default to "feature off", `NOT NULL DEFAULT 0` means all existing rows get 0 automatically. Document this explicitly in the migration note so operators don't run a redundant UPDATE.
 
 3. **Three-source dedup priority must be documented in code** — comment in `getMergedRecipients()` explains: external > is_recipient > developer-auto. Without this comment, future maintainers may change the `array_merge()` order and break the priority contract silently.
+
+---
+
+# RETRO addendum — US-22: Developer-Only Access Restriction
+
+**Branch**: `feature/asyncstandup-access-restriction` → `main`
+**Review cycles**: 2 | **Plan amendments**: 1 (PA-11, branch-ancestry artefact)
+
+## What went well
+
+- Clean implementation — 2 pure PDO-injectable functions, 6 focused test cases, server-side `forbid()` as authoritative check.
+- Zero-membership edge case handled correctly on first attempt (bootstrapping preserved).
+- 61 tests, 118 assertions — clean pass on Cycle 2.
+
+## Lessons learned (US-22 summary)
+
+1. **Standalone documentation commits appear in subsequent branch diffs** — `README.md` rewritten between US-21 and US-22 caused a Code Reviewer scope flag. Prevention: note standalone commits in the next story's IMPL-PLAN as "branch-ancestry artefacts, not US-N changes" OR include a small PA preemptively listing them.
+
+2. **`isPureDeveloper()` zero-membership edge case is critical** — a new user with no team memberships must NOT be blocked from creating their first organisation. The `COUNT(team_members WHERE user_id=?) > 0` condition is the gate; document it clearly in PHPDoc so future maintainers understand why it's required.
+
+3. **Server-side `forbid()` is canonical; UI hiding is supplementary** — hiding links is UX improvement only. A pure developer crafting a direct POST to `orgs/create.php` must still get HTTP 403. Never rely on UI-only access control.

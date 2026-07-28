@@ -13,7 +13,10 @@ require_once __DIR__ . '/../../src/TeamRepository.php';
 startSession();
 requireLogin();
 
-$pdo   = getDb($config);
+$pdo             = getDb($config);
+$isPureDeveloper = isPureDeveloper($pdo, (int) $_SESSION['user_id']);
+if ($isPureDeveloper) { forbid(); }
+
 $orgId = (int) ($_GET['org_id'] ?? $_POST['org_id'] ?? 0);
 $org   = getOrgById($pdo, $orgId);
 

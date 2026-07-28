@@ -13,9 +13,10 @@ require_once __DIR__ . '/../../src/TeamRepository.php';
 startSession();
 requireLogin();
 
-$pdo   = getDb($config);
-$orgId = (int) ($_GET['org_id'] ?? 0);
-$org   = getOrgById($pdo, $orgId);
+$pdo             = getDb($config);
+$isPureDeveloper = isPureDeveloper($pdo, (int) $_SESSION['user_id']);
+$orgId           = (int) ($_GET['org_id'] ?? 0);
+$org             = getOrgById($pdo, $orgId);
 
 if ($org === null || !isOrgMember($pdo, $orgId, (int) $_SESSION['user_id'])) { forbid(); }
 
@@ -28,7 +29,9 @@ ob_start();
 <p class="text-sm text-gray-500 mb-1"><a href="/orgs/index.php" class="text-indigo-600 hover:text-indigo-700">← Organisations</a></p>
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold text-gray-900">Teams — <?= htmlspecialchars($org['name'], ENT_QUOTES, 'UTF-8') ?></h1>
+  <?php if (!$isPureDeveloper): ?>
   <a href="/teams/create.php?org_id=<?= (int) $orgId ?>" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm">+ New Team</a>
+  <?php endif; ?>
 </div>
 
 <?php if (empty($teams)): ?>

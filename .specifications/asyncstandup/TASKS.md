@@ -835,3 +835,45 @@ Phase 11 (password reset)
      - [ ] Manually: enable flag on team; trigger summary cron; confirm developer receives email without unsubscribe link
      - [ ] Manually: disable flag; confirm developer no longer receives summary
      - [ ] `git commit -m "feat(us-21): summary_to_all_developers team setting"`
+
+---
+
+## Phase 22: Developer-Only Access Restriction (US-22)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+### Tasks
+134. Add `isOrgOrTeamOwnerAnywhere(PDO $pdo, int $userId): bool` to `src/Auth.php` ⚠️ **Path B — additive**
+     - [ ] Check `users.is_admin` via SELECT
+     - [ ] Check `COUNT(*) FROM organisations WHERE created_by = ?`
+     - [ ] Check `COUNT(*) FROM team_members WHERE user_id = ? AND is_owner = 1`
+     - [ ] Return `true` if any condition true; `false` otherwise
+
+135. Add `isPureDeveloper(PDO $pdo, int $userId): bool` to `src/Auth.php` ⚠️ **Path B — additive**
+     - [ ] Call `isOrgOrTeamOwnerAnywhere()` — return `false` immediately if truthy
+     - [ ] Check `COUNT(*) FROM team_members WHERE user_id = ?` — return `true` only if > 0
+     - [ ] Return `false` for users with zero memberships (new users can bootstrap)
+
+136. Add pure developer check to `public/orgs/create.php` ⚠️ **Path B**
+     - [ ] After `requireLogin()`: `$isPureDeveloper = isPureDeveloper($pdo, $currentUser['id']); if ($isPureDeveloper) forbid();`
+
+137. Add pure developer check to `public/teams/create.php` ⚠️ **Path B**
+     - [ ] Same pattern as orgs/create.php
+
+138. Hide "New Organisation" link in `public/orgs/index.php` ⚠️ **Path B**
+     - [ ] Compute `$isPureDeveloper = isPureDeveloper($pdo, $currentUser['id'])` once at top
+     - [ ] Wrap "New Organisation" link in `<?php if (!$isPureDeveloper): ?>` conditional
+
+139. Hide "New Team" link in `public/teams/index.php` ⚠️ **Path B**
+     - [ ] Same pattern: compute `$isPureDeveloper` once; wrap "New Team" link conditionally
+
+140. Add test cases to `tests/RepositoryTest.php` ⚠️ **Path B**
+     - [ ] Seed and test 6 scenarios for `isOrgOrTeamOwnerAnywhere()` + `isPureDeveloper()`: admin, org creator, team owner, pure developer (memberships no ownership), new user (zero memberships), mixed-role user (owner on one team + dev on another)
+     - [ ] Use `createTestPdo()` from bootstrap; seed minimal data per scenario
+
+141. Verify and commit
+     - [ ] Test: invite a user as developer only; log in; try to visit `orgs/create.php` → 403
+     - [ ] Test: same user visits `orgs/index.php` → no "New Organisation" link
+     - [ ] Test: freshly registered user (no memberships) visits `orgs/create.php` → page renders
+     - [ ] Test: team owner visits `orgs/create.php` → page renders
+     - [ ] Run `php tests/phpunit.phar --configuration tests/phpunit.xml` → all tests pass
+     - [ ] `git commit -m "feat(us-22): pure developer access restriction on org and team creation"`

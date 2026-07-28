@@ -12,7 +12,10 @@ require_once __DIR__ . '/../../src/OrgRepository.php';
 startSession();
 requireLogin();
 
-$pdo    = getDb($config);
+$pdo             = getDb($config);
+$isPureDeveloper = isPureDeveloper($pdo, (int) $_SESSION['user_id']);
+if ($isPureDeveloper) { forbid(); }
+
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

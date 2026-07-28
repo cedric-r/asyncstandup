@@ -8,6 +8,7 @@ require_once __DIR__ . '/../src/Csrf.php';
 require_once __DIR__ . '/../src/Captcha.php';
 require_once __DIR__ . '/../src/Mailer.php';
 require_once __DIR__ . '/../src/View.php'; // renderEmailTemplate()
+require_once __DIR__ . '/../src/InvitationRepository.php';
 
 $config = require __DIR__ . '/../config/config.php';
 
@@ -49,7 +50,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (empty($errors)) {
             try {
-                registerUser($pdo, $email, $password, $displayName);
+                $newUserId = registerUser($pdo, $email, $password, $displayName);
+
+                // Accept invitation if the user registered via an invite link.
+                if (!empty($invite)) {
+                    acceptInvitationForUser($pdo, $invite, $newUserId);
+                }
 
                 // Notify all approved admins of the new registration.
                 $adminStmt = $pdo->query("SELECT email, display_name FROM users WHERE is_admin = 1 AND account_status = 'approved'");

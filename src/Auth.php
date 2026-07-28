@@ -344,3 +344,62 @@ function deleteUserAccount(PDO $pdo, int $userId, string $passwordInput): bool
 
     return true;
 }
+
+/**
+ * Return true if the user has any ownership or admin privilege anywhere in the system.
+ *
+ * True if ANY: is_admin=1, OR created ≥1 organisation, OR is_owner=1 on ≥1 team.
+ * Used to determine whether the user is allowed to create organisations and teams.
+ */
+function isOrgOrTeamOwnerAnywhere(PDO $pdo, int $userId): bool
+{
+    // 1. Admin flag.
+    $stmt = $pdo->prepare('SELECT is_admin FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    if ((bool) $stmt->fetchColumn()) {
+        return true;
+    }
+
+    // 2. Org creator.
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM organisations WHERE created_by = ?');
+    $stmt->execute([$userId]);
+    if ((int) $stmt->fetchColumn() > 0) {
+        return true;
+    }
+
+    // 3. Team owner on any team.
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*) FROM team_members WHERE user_id = ? AND is_owner = 1'
+    );
+    $stmt->execute([$userId]);
+    if ((int) $stmt->fetchColumn() > 0) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Return true if the user is a "pure developer" — has team memberships
+ * but holds no ownership or admin privilege anywhere.
+ *
+ * Zero-membership users return false: a freshly registered user must be
+ * able to create their first organisation (bootstrapping).
+ *
+ * Pure developers can participate in standups but cannot create or manage
+ * team structures — that is owner/admin territory.
+ */
+function isPureDeveloper(PDO $pdo, int $userId): bool
+{
+    // Must have no ownership or admin privilege.
+    if (isOrgOrTeamOwnerAnywhere($pdo, $userId)) {
+        return false;
+    }
+
+    // Must have at least one team membership (any role) to be considered
+    // a "pure developer". Zero-membership new users are not restricted.
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM team_members WHERE user_id = ?');
+    $stmt->execute([$userId]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
