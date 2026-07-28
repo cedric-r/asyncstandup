@@ -154,4 +154,115 @@ class DashboardRepositoryTest extends TestCase
         self::assertContains('Answer A', $answers);
         self::assertContains('Answer B', $answers);
     }
+
+    // =========================================================================
+    // getPendingTokensForUser() — 5 cases (US-18)
+    // =========================================================================
+
+    private function seedPendingToken(
+        PDO $pdo,
+        int $teamId,
+        int $userId,
+        string $token,
+        string $expiresAt,
+        ?string $usedAt = null
+    ): void {
+        $pdo->prepare('
+            INSERT INTO standup_tokens (team_id, user_id, token, send_date, sent_at, expires_at, used_at)
+            VALUES (?, ?, ?, date("now"), datetime("now"), ?, ?)
+        ')->execute([$teamId, $userId, $token, $expiresAt, $usedAt]);
+    }
+
+    public function testGetPendingTokensReturnsUnsubmittedToken(): void
+    {
+        $userId = seedUser($this->pdo, 'dev-pending@test.com', 'Dev Pending');
+        $orgId  = seedOrg($this->pdo, $userId);
+        $teamId = seedTeam($this->pdo, $orgId, $userId);
+        seedTeamMember($this->pdo, $teamId, $userId, 0, 1); // is_developer=1
+
+        $future = gmdate('Y-m-d H:i:s', time() + 172800); // +48h
+        $this->seedPendingToken($this->pdo, $teamId, $userId, 'tok-valid-001', $future);
+
+        $results = getPendingTokensForUser($this->pdo, $userId);
+
+        self::assertCount(1, $results);
+        self::assertSame('tok-valid-001', $results[0]['token']);
+    }
+
+    public function testGetPendingTokensExcludesUsedToken(): void
+    {
+        $userId = seedUser($this->pdo, 'dev-used@test.com', 'Dev Used');
+        $orgId  = seedOrg($this->pdo, $userId);
+        $teamId = seedTeam($this->pdo, $orgId, $userId);
+        seedTeamMember($this->pdo, $teamId, $userId, 0, 1);
+
+        $future = gmdate('Y-m-d H:i:s', time() + 172800);
+        $now    = gmdate('Y-m-d H:i:s');
+        $this->seedPendingToken($this->pdo, $teamId, $userId, 'tok-used-001', $future, $now);
+
+        $results = getPendingTokensForUser($this->pdo, $userId);
+
+        self::assertCount(0, $results, 'Used token must not appear in pending list');
+    }
+
+    public function testGetPendingTokensExcludesExpiredToken(): void
+    {
+        $userId = seedUser($this->pdo, 'dev-expired@test.com', 'Dev Expired');
+        $orgId  = seedOrg($this->pdo, $userId);
+        $teamId = seedTeam($this->pdo, $orgId, $userId);
+        seedTeamMember($this->pdo, $teamId, $userId, 0, 1);
+
+        // Expired 1 hour ago.
+        $past = gmdate('Y-m-d H:i:s', time() - 3600);
+        $this->seedPendingToken($this->pdo, $teamId, $userId, 'tok-expired-001', $past);
+
+        $results = getPendingTokensForUser($this->pdo, $userId);
+
+        self::assertCount(0, $results, 'Expired token must not appear in pending list');
+    }
+
+    public function testGetPendingTokensExcludesNonDeveloper(): void
+    {
+        $userId = seedUser($this->pdo, 'dev-nondev@test.com', 'Non Dev');
+        $orgId  = seedOrg($this->pdo, $userId);
+        $teamId = seedTeam($this->pdo, $orgId, $userId);
+        // is_developer=0
+        $this->pdo->prepare('INSERT INTO team_members (team_id, user_id, is_owner, is_developer, is_recipient) VALUES (?, ?, 0, 0, 1)')
+            ->execute([$teamId, $userId]);
+
+        $future = gmdate('Y-m-d H:i:s', time() + 172800);
+        $this->seedPendingToken($this->pdo, $teamId, $userId, 'tok-nondev-001', $future);
+
+        $results = getPendingTokensForUser($this->pdo, $userId);
+
+        self::assertCount(0, $results, 'Non-developer must not see pending tokens');
+    }
+
+    public function testGetPendingTokensReturnsMultipleTeamsOrderedByName(): void
+    {
+        $userId = seedUser($this->pdo, 'dev-multi@test.com', 'Dev Multi');
+        $orgId  = seedOrg($this->pdo, $userId);
+        $future = gmdate('Y-m-d H:i:s', time() + 172800);
+
+        // Two teams: 'Zebra Team' and 'Alpha Team'.
+        $this->pdo->prepare('INSERT INTO teams (org_id, name, timezone, standup_time, created_by) VALUES (?, ?, ?, ?, ?)')
+            ->execute([$orgId, 'Zebra Team', 'UTC', '09:00:00', $userId]);
+        $teamIdZ = (int) $this->pdo->lastInsertId();
+
+        $this->pdo->prepare('INSERT INTO teams (org_id, name, timezone, standup_time, created_by) VALUES (?, ?, ?, ?, ?)')
+            ->execute([$orgId, 'Alpha Team', 'UTC', '09:00:00', $userId]);
+        $teamIdA = (int) $this->pdo->lastInsertId();
+
+        seedTeamMember($this->pdo, $teamIdZ, $userId, 0, 1);
+        seedTeamMember($this->pdo, $teamIdA, $userId, 0, 1);
+
+        $this->seedPendingToken($this->pdo, $teamIdZ, $userId, 'tok-zebra-001', $future);
+        $this->seedPendingToken($this->pdo, $teamIdA, $userId, 'tok-alpha-001', $future);
+
+        $results = getPendingTokensForUser($this->pdo, $userId);
+
+        self::assertCount(2, $results);
+        self::assertSame('Alpha Team', $results[0]['team_name'], 'Results must be ordered A-Z by team name');
+        self::assertSame('Zebra Team', $results[1]['team_name']);
+    }
 }

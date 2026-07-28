@@ -187,3 +187,41 @@ function getResponseData(
 
     return $stmt->fetchAll();
 }
+
+/**
+ * Return all unexpired, unsubmitted standup tokens for a developer user.
+ *
+ * Surfaces tokens where:
+ *   - used_at IS NULL (not yet submitted)
+ *   - expires_at > now (not expired; datetime() wrapper for SQLite compat)
+ *   - team_members.is_developer = 1 for this user on this team
+ *
+ * The 48-hour expiry window intentionally allows late submissions from
+ * the previous send_date to surface — consistent with the US-6 token spec.
+ *
+ * @return array{token: string, send_date: string, team_name: string, timezone: string}[]
+ */
+function getPendingTokensForUser(PDO $pdo, int $userId): array
+{
+    // PHP-computed UTC timestamp: avoids datetime('now') which is SQLite-only;
+    // plain string comparison works correctly in MySQL (DATETIME vs string)
+    // and SQLite (TEXT vs TEXT) when the column stores ISO 8601 UTC strings.
+    $nowUtc = gmdate('Y-m-d H:i:s');
+
+    $stmt = $pdo->prepare('
+        SELECT st.token, st.send_date, t.name AS team_name, t.timezone
+        FROM standup_tokens st
+        JOIN teams t         ON t.id  = st.team_id
+        JOIN team_members tm ON tm.team_id = st.team_id
+                             AND tm.user_id = st.user_id
+        WHERE st.user_id = ?
+          AND st.used_at IS NULL
+          AND st.expires_at > ?
+          AND tm.is_developer = 1
+        ORDER BY t.name ASC
+    ');
+
+    $stmt->execute([$userId, $nowUtc]);
+
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}

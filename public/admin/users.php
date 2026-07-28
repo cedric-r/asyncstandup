@@ -58,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
 
     } elseif ($action === 'reject' && $targetId > 0) {
+        $pdo->beginTransaction();
         try {
             // Full FK-safe cascade (matches deleteUserAccount() order).
             $pdo->prepare('UPDATE standup_submissions SET user_id    = NULL WHERE user_id    = ?')->execute([$targetId]);
@@ -71,8 +72,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare('DELETE FROM invitations     WHERE invited_by = ?')->execute([$targetId]);
             $pdo->prepare('DELETE FROM password_resets WHERE user_id   = ?')->execute([$targetId]);
             $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$targetId]);
+            $pdo->commit();
         } catch (\Throwable $e) {
-            error_log('[REJECT DEBUG] ' . $e->getMessage() . ' | Code: ' . $e->getCode());
+            $pdo->rollBack();
+            error_log('[AsyncStandUp] admin reject user ' . $targetId . ' failed: ' . $e->getMessage());
             throw $e;
         }
         setFlash('success', 'User rejected and removed.');

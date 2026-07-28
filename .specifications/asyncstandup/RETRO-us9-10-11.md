@@ -291,3 +291,58 @@ Applied to: `acceptInvitationForUser()`, `createPasswordResetToken()`. Apply to 
 2. **Extract a pure inner function for partial testability** — `captchaValidate()` mixes session access (impure) with answer matching (pure). Extracting `captchaCheckAnswer(int $idx, string $userInput): bool` as a pure function would make the matching logic directly testable without any session. Recommend extracting in a follow-up story.
 
 3. **Pure PHP file + session-only state = no scope surprises** — `src/Captcha.php` adds no DB tables, no new DB queries, and no external services. When implementation exactly matches the spec (spec-driven development), amendments are not needed. Keep spec detail level high for future stories.
+
+---
+
+# RETRO addendum — US-18: Pending Standups on Dashboard
+
+**Branch**: `feature/asyncstandup-dashboard-pending` → `main`
+**Review cycles**: 3 | **Plan amendments**: 2 (PA-9, PA-10)
+
+## What went well
+
+- `getPendingTokensForUser()` query logic (used_at IS NULL, expires_at filter, is_developer JOIN) was correct on first implementation.
+- 5 test cases in `DashboardRepositoryTest.php` were written correctly and all passed first run — including the ordering test (Alpha before Zebra).
+- `gmdate()` used for test seed timestamps (UTC-aligned, avoiding the US-8 strtotime lesson). Also applied for the final production fix.
+- PLAN-AMENDMENT-9 and PLAN-AMENDMENT-10 were raised promptly and correctly.
+
+## What caused review cycles
+
+### Cycle 1 MAJOR-1 + MAJOR-2: reject action debug label + missing transaction
+
+The reject cascade in `admin/users.php` (from US-16/17 hot-fixes) had:
+- A `[REJECT DEBUG]` label in the error_log call — debug artifact in production code
+- No `beginTransaction()` wrapper — a multi-statement cascade without a transaction is a data integrity bug
+
+**Lesson**: Any multi-statement cascade (UPDATE × N + DELETE × N) must always be wrapped in a transaction. The `deleteUserAccount()` function in Auth.php does this correctly — the reject action should have been modelled on it from the start.
+
+### Cycle 2: `datetime('now')` is SQLite-only
+
+**What happened**: `getPendingTokensForUser()` used `datetime('now')` directly in the SQL WHERE clause. This is valid in SQLite but MySQL rejects it in this context.
+
+**Root cause**: The test suite uses SQLite in-memory. A query that passes all SQLite tests can fail silently in MySQL production when using dialect-specific datetime functions.
+
+**Fix**: PHP-computed `$nowUtc = gmdate('Y-m-d H:i:s')` passed as a bound parameter. Plain string comparison `expires_at > ?` works in both MySQL (DATETIME column compared against datetime string) and SQLite (TEXT column compared against ISO 8601 TEXT string).
+
+**Lesson**: **Any date/time comparison in a new SQL query must be verified against both MySQL and SQLite dialects before marking READY.** The rule: if a datetime value is needed in a WHERE clause, compute it in PHP with `gmdate()` and pass as a `?` parameter. Never use `datetime('now')`, `NOW()`, `UTC_TIMESTAMP()`, or any DB-specific datetime function in WHERE conditions — these are dialect-specific.
+
+**Prevention checklist item**: Before READY FOR REVIEW, grep new queries for `datetime('now'|'now'`, `NOW()`, `UTC_TIMESTAMP()` in WHERE/HAVING clauses. Replace with PHP-computed bound parameters.
+
+### PA-9: Hot-fix files in branch diff not in IMPL-PLAN
+
+Five files from US-16/17 hot-fixes (`admin/users.php`, `Auth.php`, `View.php`, `register.php`, `layout.php`) appeared in the branch diff because the feature branch was cut from main after those hot-fixes landed. Code Reviewer correctly flagged them as unplanned. PLAN-AMENDMENT-9 documented the context.
+
+**Lesson**: When cutting a feature branch from main, check if recent hot-fix commits are included in the diff. If they are, pre-list them in the IMPL-PLAN with a note: “Hot-fix files from [story] — included for diff accuracy; no US-18 changes in these files.”
+
+### PA-10: User requested dashboard link on submit.php mid-Gate-D
+
+Small UX request raised after review. Handled correctly: PLAN-AMENDMENT-10 committed with PENDING status, user approved, implemented in one line. Process worked.
+
+**Lesson**: User requests during review are handled cleanly via the PLAN-AMENDMENT process. No need to panic or merge early.
+
+## Lessons learned (US-18 summary)
+
+1. **`datetime('now')` is SQLite-only** — use `gmdate('Y-m-d H:i:s')` as a bound parameter for any date comparison in production queries.
+2. **Multi-statement cascades must use `beginTransaction()`** — no exceptions; every multi-step cascade without a transaction is a data integrity bug.
+3. **Hot-fix files in branch diff → pre-list in IMPL-PLAN** — note context so Code Reviewer doesn't flag them as unplanned scope.
+4. **Test suite uses SQLite; verify MySQL compat manually** — especially for datetime functions, MySQL-specific syntax, and column type differences.

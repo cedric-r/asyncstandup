@@ -72,6 +72,7 @@ if ($tokenData['used_at'] !== null) {
         <br>
         <?php endforeach; ?>
     </div>
+    <p class="mt-8"><a href="/dashboard.php">&larr; Back to dashboard</a></p>
     <?php
     $content = ob_get_clean();
     include __DIR__ . '/../templates/layout.php';

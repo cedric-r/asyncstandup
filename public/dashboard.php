@@ -13,9 +13,12 @@ startSession();
 requireLogin();
 
 $pdo         = getDb($config);
-$currentUser = getCurrentUser($pdo);
-$flash       = getFlash();
-$teams       = getTeamsForUser($pdo, (int) $_SESSION['user_id']);
+$currentUser    = getCurrentUser($pdo);
+$flash          = getFlash();
+$pendingTokens  = $currentUser !== null
+    ? getPendingTokensForUser($pdo, (int) $currentUser['id'])
+    : [];
+$teams          = getTeamsForUser($pdo, (int) $_SESSION['user_id']);
 
 // Group by org.
 $byOrg = [];
@@ -33,6 +36,22 @@ foreach ($teams as $team) {
 ob_start();
 ?>
 <h1 class="page-title">Dashboard</h1>
+
+<?php if (!empty($pendingTokens)): ?>
+<section class="pending-standups">
+    <h2>⏳ Pending standups</h2>
+    <ul>
+    <?php foreach ($pendingTokens as $pt): ?>
+        <li>
+            <a href="/submit.php?token=<?= htmlspecialchars($pt['token'], ENT_QUOTES, 'UTF-8') ?>">
+                Submit standup for <?= htmlspecialchars($pt['team_name'], ENT_QUOTES, 'UTF-8') ?>
+            </a>
+            <small class="text-muted">(<?= htmlspecialchars($pt['send_date'], ENT_QUOTES, 'UTF-8') ?>)</small>
+        </li>
+    <?php endforeach; ?>
+    </ul>
+</section>
+<?php endif; ?>
 
 <?php if (empty($teams)): ?>
 <div class="card">

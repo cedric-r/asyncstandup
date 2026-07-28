@@ -611,3 +611,38 @@ Phase 11 (password reset)
     - [ ] Test: non-admin visits `/admin/users.php` → 403
     - [ ] Test: admin tries to toggle own admin flag → error; flag unchanged
     - [ ] `git commit -m "feat(us-17): admin role, registration approval, user management"`
+
+---
+
+## Phase 18: Pending Standups on Dashboard (US-18)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+### Tasks
+98. Add `getPendingTokensForUser(PDO $pdo, int $userId): array` to `src/DashboardRepository.php` ⚠️ **Path B — additive**
+    - [ ] Write query per US-18 STORY.md: JOIN standup_tokens → teams → team_members; WHERE used_at IS NULL AND datetime(expires_at) > datetime('now') AND is_developer = 1
+    - [ ] `ORDER BY t.name ASC`
+    - [ ] Use `datetime()` wrappers for SQLite compatibility
+    - [ ] `fetchAll(PDO::FETCH_ASSOC)`
+
+99. Add pending standups section to `public/dashboard.php` ⚠️ **Path B — additive**
+    - [ ] Call `getPendingTokensForUser($pdo, $currentUser['id'])` at top of file (after requireLogin)
+    - [ ] Render `<section class="pending-standups">` with `<ul>` only when `!empty($pendingTokens)`
+    - [ ] Each list item: link to `/submit.php?token=<token>` with team name; `<small>` send_date label
+    - [ ] `htmlspecialchars(ENT_QUOTES, 'UTF-8')` on token, team_name, send_date
+    - [ ] Section rendered ABOVE existing team list
+    - [ ] Add `.pending-standups` CSS to `public/assets/style.css` (amber left-border; yellow-tinted background)
+
+100. Write integration test in `tests/DashboardRepositoryTest.php`
+     - [ ] `setUp()`: create in-memory SQLite PDO; apply `tests/schema-sqlite.sql`; seed user, team, team_member (is_developer=1), standup_token (used_at=NULL, future expires_at)
+     - [ ] Test: valid pending token → 1 row returned with correct token and team_name
+     - [ ] Test: token with used_at set → 0 rows
+     - [ ] Test: token with expires_at in the past → 0 rows
+     - [ ] Test: team_member with is_developer=0 → 0 rows
+     - [ ] Test: no tokens at all → empty array
+
+101. Verify and commit
+     - [ ] Manually: seed a pending token; log in; confirm section appears with correct link
+     - [ ] Manually: submit standup via link; reload dashboard; confirm section gone
+     - [ ] Manually: user with no pending tokens → no section rendered
+     - [ ] Run `php tests/phpunit.phar --configuration tests/phpunit.xml` → all tests pass
+     - [ ] `git commit -m "feat(us-18): pending standups section on dashboard landing page"`
