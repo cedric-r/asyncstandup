@@ -877,3 +877,39 @@ Phase 11 (password reset)
      - [ ] Test: team owner visits `orgs/create.php` → page renders
      - [ ] Run `php tests/phpunit.phar --configuration tests/phpunit.xml` → all tests pass
      - [ ] `git commit -m "feat(us-22): pure developer access restriction on org and team creation"`
+
+---
+
+## Phase 23: Admin Delete User (US-23)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+### Tasks
+142. Refactor `src/Auth.php` — extract `cascadeDeleteUser()` ⚠️ **Path B**
+     - [ ] Create `cascadeDeleteUser(PDO $pdo, int $userId): void` containing the 8 cascade steps from US-16's `deleteUserAccount()` (in FK-safe order per STORY.md); include step 3: `UPDATE team_recipients SET added_by = NULL WHERE added_by = ?`
+     - [ ] Add docblock: lists all 8 steps; notes caller is responsible for transaction
+     - [ ] Refactor `deleteUserAccount()` to call `cascadeDeleteUser()` after password verify; behaviour unchanged
+     - [ ] Verify US-16 self-deletion still works after refactor
+
+143. Add `adminDeleteUser(PDO $pdo, int $targetUserId): void` to `src/Auth.php` ⚠️ **Path B — additive**
+     - [ ] Open transaction; call `cascadeDeleteUser()`; commit; rollback + rethrow on exception
+     - [ ] No password check
+
+144. Add delete action to `public/admin/users.php` ⚠️ **Path B**
+     - [ ] Add `case 'delete_user':` to POST handler switch
+     - [ ] Self-delete guard: `(int)$_POST['target_user_id'] !== (int)$_SESSION['user_id']` — set `$flashError` and `break` if same
+     - [ ] Validate `$targetId > 0`
+     - [ ] Call `adminDeleteUser($pdo, $targetId)`; set `$flash = 'User deleted.'`; PRG redirect
+     - [ ] Add delete button to user row template: hidden inputs (csrf_token, action=delete_user, target_user_id); danger button; `onclick="return confirm(...)"` inline JS UX guard
+     - [ ] Button rendered only when `$user['id'] !== $currentUser['id']`
+
+145. Add cascade test cases to `tests/RepositoryTest.php` ⚠️ **Path B**
+     - [ ] Seed full hierarchy: user, org, team, team_member, team_question, standup_token, standup_submission, standup_answer, summary_sent, team_recipient (added_by=user), invitation (invited_by=user), org_member, password_reset
+     - [ ] Call `adminDeleteUser($pdo, $userId)` (or `cascadeDeleteUser()` inside a transaction)
+     - [ ] Assert: `users` row gone; `standup_submissions.user_id = NULL`; `standup_tokens.user_id = NULL`; `team_recipients.added_by = NULL` (row retained); `team_members` gone; `org_members` gone; `invitations` gone; `password_resets` gone; no PDO exception
+
+146. Verify and commit
+     - [ ] Test: admin deletes another user → user gone; flash shown; submissions preserved with NULL user_id
+     - [ ] Test: admin attempts to delete own account via crafted POST → error message; admin account intact
+     - [ ] Test: non-admin POST to delete action → 403
+     - [ ] Run `php tests/phpunit.phar --configuration tests/phpunit.xml` → all tests pass (US-16 self-delete still works)
+     - [ ] `git commit -m "feat(us-23): admin delete user with cascadeDeleteUser refactor"`

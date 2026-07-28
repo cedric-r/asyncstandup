@@ -73,6 +73,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: /admin/users.php');
             exit;
         }
+
+    } elseif ($action === 'delete_user' && $targetId > 0) {
+        if ($targetId === $adminId) {
+            $errors[] = 'You cannot delete your own account from the admin panel.';
+        } else {
+            adminDeleteUser($pdo, $targetId);
+            setFlash('success', 'User deleted.');
+            header('Location: /admin/users.php');
+            exit;
+        }
     }
 }
 
@@ -145,6 +155,15 @@ ob_start();
         <input type="hidden" name="user_id" value="<?= (int) $u['id'] ?>">
         <button type="submit" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-1 px-2.5 rounded border border-gray-200">
           <?= $u['is_admin'] ? 'Remove admin' : 'Make admin' ?>
+        </button>
+      </form>
+      <form method="POST" style="display:inline">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="action" value="delete_user">
+        <input type="hidden" name="user_id" value="<?= (int) $u['id'] ?>">
+        <button type="submit" onclick="return confirm('Delete this user and all their data? This cannot be undone.')"
+                class="text-xs bg-red-600 hover:bg-red-700 text-white font-medium py-1 px-2.5 rounded">
+          Delete
         </button>
       </form>
       <?php endif; ?>

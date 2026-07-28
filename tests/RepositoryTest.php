@@ -784,4 +784,96 @@ class RepositoryTest extends TestCase
         self::assertFalse(isPureDeveloper($this->pdo, $ownerId),
             'User with owner role on any team is not a pure developer');
     }
+
+    // =========================================================================
+    // adminDeleteUser() / cascadeDeleteUser() (US-23)
+    // =========================================================================
+
+    public function testAdminDeleteUser_CascadePreservesSubmissionsAndCleansRelations(): void
+    {
+        // Seed: full tree for the target user.
+        $targetId = seedUser($this->pdo, 'delete-target@test.com', 'Delete Target');
+        $ownerId  = seedUser($this->pdo, 'admin-del@test.com', 'Admin Del');
+        $orgId    = seedOrg($this->pdo, $targetId); // target created the org
+        $teamId   = seedTeam($this->pdo, $orgId, $targetId);
+        seedTeamMember($this->pdo, $teamId, $targetId, 1, 1);
+        seedTeamMember($this->pdo, $teamId, $ownerId, 0, 1);
+
+        // Seed question + token + submission.
+        $this->pdo->exec("INSERT INTO team_questions (team_id, question, position) VALUES ({$teamId}, 'Q?', 1)");
+        $qId = (int) $this->pdo->lastInsertId();
+
+        $future = gmdate('Y-m-d H:i:s', time() + 172800);
+        $this->pdo->prepare('
+            INSERT INTO standup_tokens (team_id, user_id, token, send_date, sent_at, expires_at, used_at)
+            VALUES (?, ?, ?, ?, datetime("now"), ?, datetime("now"))
+        ')->execute([$teamId, $targetId, 'del-tok', '2024-01-15', $future]);
+        $tokenId = (int) $this->pdo->lastInsertId();
+
+        $this->pdo->prepare('INSERT INTO standup_submissions (token_id, user_id, team_id) VALUES (?, ?, ?)')
+            ->execute([$tokenId, $targetId, $teamId]);
+        $subId = (int) $this->pdo->lastInsertId();
+
+        // team_recipients row added_by target.
+        $this->pdo->prepare('INSERT INTO team_recipients (team_id, email, display_name, added_by) VALUES (?, ?, ?, ?)')
+            ->execute([$teamId, 'ext@test.com', 'Ext', $targetId]);
+        $recipId = (int) $this->pdo->lastInsertId();
+
+        // Invitation sent by target.
+        $this->pdo->prepare('
+            INSERT INTO invitations (team_id, invited_email, token, invited_by, intended_roles, created_at)
+            VALUES (?, ?, ?, ?, ?, datetime("now"))
+        ')->execute([$teamId, 'inv@test.com', 'inv-tok-del', $targetId, 'developer']);
+
+        // password_resets row for target.
+        $this->pdo->prepare(
+            'INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, datetime("now","+1 hour"))'
+        )->execute([$targetId, 'pw-reset-del']);
+
+        // Execute admin delete.
+        adminDeleteUser($this->pdo, $targetId);
+
+        // Assertions.
+        // User gone.
+        $userRow = $this->pdo->query("SELECT id FROM users WHERE id = {$targetId}")->fetch();
+        self::assertFalse($userRow, 'User row must be deleted');
+
+        // Submission preserved with user_id=NULL.
+        $subRow = $this->pdo->query("SELECT user_id FROM standup_submissions WHERE id = {$subId}")->fetch();
+        self::assertNotFalse($subRow, 'standup_submissions row must be preserved');
+        self::assertNull($subRow['user_id'], 'standup_submissions.user_id must be NULL');
+
+        // Token preserved with user_id=NULL.
+        $tokRow = $this->pdo->query("SELECT user_id FROM standup_tokens WHERE id = {$tokenId}")->fetch();
+        self::assertNotFalse($tokRow, 'standup_tokens row must be preserved');
+        self::assertNull($tokRow['user_id'], 'standup_tokens.user_id must be NULL');
+
+        // organisations.created_by=NULL.
+        $orgRow = $this->pdo->query("SELECT created_by FROM organisations WHERE id = {$orgId}")->fetch();
+        self::assertNull($orgRow['created_by'], 'organisations.created_by must be NULL');
+
+        // team_recipients.added_by=NULL.
+        $recipRow = $this->pdo->query("SELECT added_by FROM team_recipients WHERE id = {$recipId}")->fetch();
+        self::assertNull($recipRow['added_by'], 'team_recipients.added_by must be NULL');
+
+        // team_members for target gone.
+        $tmCount = (int) $this->pdo->query("SELECT COUNT(*) FROM team_members WHERE user_id = {$targetId}")->fetchColumn();
+        self::assertSame(0, $tmCount, 'team_members must be deleted for target user');
+
+        // org_members for target gone.
+        $omCount = (int) $this->pdo->query("SELECT COUNT(*) FROM org_members WHERE user_id = {$targetId}")->fetchColumn();
+        self::assertSame(0, $omCount, 'org_members must be deleted for target user');
+
+        // invitation by target gone.
+        $invCount = (int) $this->pdo->query("SELECT COUNT(*) FROM invitations WHERE invited_by = {$targetId}")->fetchColumn();
+        self::assertSame(0, $invCount, 'invitations by target must be deleted');
+
+        // password_resets for target gone.
+        $prCount = (int) $this->pdo->query("SELECT COUNT(*) FROM password_resets WHERE user_id = {$targetId}")->fetchColumn();
+        self::assertSame(0, $prCount, 'password_resets must be deleted');
+
+        // Other team member (ownerId) still exists in team_members.
+        $otherTm = (int) $this->pdo->query("SELECT COUNT(*) FROM team_members WHERE user_id = {$ownerId}")->fetchColumn();
+        self::assertSame(1, $otherTm, 'Other team member must not be affected by target deletion');
+    }
 }

@@ -441,3 +441,24 @@ The initial implementation used `$hideNav = true` on auth/token pages (login, re
 2. **`isPureDeveloper()` zero-membership edge case is critical** — a new user with no team memberships must NOT be blocked from creating their first organisation. The `COUNT(team_members WHERE user_id=?) > 0` condition is the gate; document it clearly in PHPDoc so future maintainers understand why it's required.
 
 3. **Server-side `forbid()` is canonical; UI hiding is supplementary** — hiding links is UX improvement only. A pure developer crafting a direct POST to `orgs/create.php` must still get HTTP 403. Never rely on UI-only access control.
+
+---
+
+# RETRO addendum — US-23: Admin Delete User
+
+**Branch**: `feature/asyncstandup-admin-delete` → `main`
+**Review cycles**: 2 | **Plan amendments**: 1 (PA-12, branch-ancestry artefact)
+
+## What went well
+
+- `cascadeDeleteUser()` extraction was clean — all callers now share one authoritative cascade sequence.
+- 62 tests, 130 assertions — comprehensive cascade test covers all 10 steps.
+- Self-delete guard and `requireAdmin()` correctly enforced on the first attempt.
+
+## Lessons learned (US-23 summary)
+
+1. **Extract cascade to a shared inner function** — `cascadeDeleteUser()` allows multiple callers (self-delete with password check, admin delete without) without code duplication. Apply this pattern whenever deletion logic is needed from more than one context. The caller manages transaction scope; the inner function only manages FK-safe steps.
+
+2. **Pre-existing fix commits appear in branch diff — document as branch-ancestry artefacts** — PA-12 (`register.php` invite fix, commit `76bc3bf`) was avoidable. Solution: when writing the IMPL-PLAN, scan `git log main..HEAD` for any hot-fix commits and list them in the IMPL-PLAN as branch-ancestry artefacts. The Code Reviewer will then see them as pre-documented, not as unplanned scope.
+
+3. **Assert `teams.created_by=NULL` explicitly in cascade tests** — the cascade test asserts organisations but misses the teams step. For future cascade tests, assert every nullify step explicitly, not just the ones that are most memorable. A failing DB constraint will surface missing steps, but an explicit assertion is better.

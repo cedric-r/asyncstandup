@@ -299,6 +299,42 @@ function requireAdmin(): void
  *
  * Returns false if the password is wrong (no DB changes made).
  */
+/**
+ * Execute the full user deletion cascade inside the caller's transaction.
+ *
+ * Does NOT begin or commit the transaction — caller is responsible.
+ * 10 FK-safe steps (order matters; follow exactly):
+ *   1. standup_submissions.user_id → NULL (archival preserved)
+ *   2. standup_tokens.user_id → NULL (archival preserved)
+ *   3. organisations.created_by → NULL (org survives; creator info cleared)
+ *   4. teams.created_by → NULL
+ *   5. team_recipients.added_by → NULL (nullable FK; hot-fix 972452f)
+ *   6. DELETE team_members
+ *   7. DELETE org_members
+ *   8. DELETE invitations WHERE invited_by
+ *   9. DELETE password_resets
+ *  10. DELETE users
+ */
+function cascadeDeleteUser(PDO $pdo, int $userId): void
+{
+    $pdo->prepare('UPDATE standup_submissions SET user_id    = NULL WHERE user_id    = ?')->execute([$userId]);
+    $pdo->prepare('UPDATE standup_tokens      SET user_id    = NULL WHERE user_id    = ?')->execute([$userId]);
+    $pdo->prepare('UPDATE organisations       SET created_by = NULL WHERE created_by = ?')->execute([$userId]);
+    $pdo->prepare('UPDATE teams               SET created_by = NULL WHERE created_by = ?')->execute([$userId]);
+    $pdo->prepare('UPDATE team_recipients     SET added_by   = NULL WHERE added_by   = ?')->execute([$userId]);
+    $pdo->prepare('DELETE FROM team_members    WHERE user_id   = ?')->execute([$userId]);
+    $pdo->prepare('DELETE FROM org_members     WHERE user_id   = ?')->execute([$userId]);
+    $pdo->prepare('DELETE FROM invitations     WHERE invited_by = ?')->execute([$userId]);
+    $pdo->prepare('DELETE FROM password_resets WHERE user_id   = ?')->execute([$userId]);
+    $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
+}
+
+/**
+ * Delete a user account after password confirmation.
+ *
+ * Verifies the password, then calls cascadeDeleteUser() inside a transaction.
+ * Returns false if the password is wrong (no DB changes made).
+ */
 function deleteUserAccount(PDO $pdo, int $userId, string $passwordInput): bool
 {
     $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = ?');
@@ -312,30 +348,7 @@ function deleteUserAccount(PDO $pdo, int $userId, string $passwordInput): bool
     $pdo->beginTransaction();
 
     try {
-        // Nullify archival references (preserve team history).
-        $pdo->prepare('UPDATE standup_submissions SET user_id    = NULL WHERE user_id    = ?')->execute([$userId]);
-        $pdo->prepare('UPDATE standup_tokens      SET user_id    = NULL WHERE user_id    = ?')->execute([$userId]);
-
-        // Nullify created_by on orgs/teams (orgs and teams survive; creator info cleared).
-        $pdo->prepare('UPDATE organisations       SET created_by = NULL WHERE created_by = ?')->execute([$userId]);
-        $pdo->prepare('UPDATE teams               SET created_by = NULL WHERE created_by = ?')->execute([$userId]);
-
-        // team_recipients.added_by is a nullable FK — must NULL before user DELETE.
-        $pdo->prepare('UPDATE team_recipients     SET added_by   = NULL WHERE added_by   = ?')->execute([$userId]);
-
-        // Remove membership records.
-        $pdo->prepare('DELETE FROM team_members    WHERE user_id   = ?')->execute([$userId]);
-        $pdo->prepare('DELETE FROM org_members     WHERE user_id   = ?')->execute([$userId]);
-
-        // Remove invitations sent by this user.
-        $pdo->prepare('DELETE FROM invitations     WHERE invited_by = ?')->execute([$userId]);
-
-        // Remove password reset tokens.
-        $pdo->prepare('DELETE FROM password_resets WHERE user_id   = ?')->execute([$userId]);
-
-        // Finally delete the user row.
-        $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
-
+        cascadeDeleteUser($pdo, $userId);
         $pdo->commit();
     } catch (Throwable $e) {
         $pdo->rollBack();
@@ -343,6 +356,25 @@ function deleteUserAccount(PDO $pdo, int $userId, string $passwordInput): bool
     }
 
     return true;
+}
+
+/**
+ * Delete a user account as an administrator (no password check required).
+ *
+ * Wraps cascadeDeleteUser() in its own transaction.
+ * Caller must verify the target is not the admin's own account.
+ */
+function adminDeleteUser(PDO $pdo, int $targetUserId): void
+{
+    $pdo->beginTransaction();
+
+    try {
+        cascadeDeleteUser($pdo, $targetUserId);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
 }
 
 /**
