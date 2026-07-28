@@ -10,7 +10,7 @@
 </head>
 <body class="bg-gray-50 text-gray-900 min-h-screen">
 
-<nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+<nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50 text-gray-900">
   <div class="max-w-5xl mx-auto px-4">
     <div class="flex items-center justify-between h-14">
 

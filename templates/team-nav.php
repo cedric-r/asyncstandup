@@ -18,7 +18,7 @@ require_once __DIR__ . '/../src/View.php';
  * No access control logic here — callers enforce access; this partial only renders.
  */
 ?>
-<nav class="bg-white border border-gray-200 rounded-lg p-4 mb-6">
+<div class="bg-white border border-gray-200 rounded-lg p-4 mb-6">
   <!-- Breadcrumb -->
   <p class="text-xs text-gray-500 mb-3">
     <a href="/orgs/index.php" class="hover:text-indigo-600">Organisations</a>
@@ -50,4 +50,4 @@ require_once __DIR__ . '/../src/View.php';
     }
     ?>
   </div>
-</nav>
+</div>

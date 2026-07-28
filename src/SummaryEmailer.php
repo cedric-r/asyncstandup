@@ -128,16 +128,53 @@ function ensureUnsubscribeToken(PDO $pdo, int $recipientId): string
     return $token;
 }
 
-function getMergedRecipients(PDO $pdo, int $teamId): array
+/**
+ * Return all developer members for a team as potential summary recipients.
+ *
+ * Used when summary_to_all_developers = 1. These rows have no id or
+ * unsubscribe_token because they have no team_recipients row.
+ * Developers opt out via profile.php, not via an unsubscribe link.
+ *
+ * @return array{email: string, display_name: string|null, unsubscribe_token: null}[]
+ */
+function queryDeveloperMembers(PDO $pdo, int $teamId): array
 {
-    // External recipients — include id and unsubscribe_token for lazy generation at send time.
+    $stmt = $pdo->prepare('
+        SELECT u.email, u.display_name, NULL AS unsubscribe_token
+        FROM team_members tm
+        JOIN users u ON u.id = tm.user_id
+        WHERE tm.team_id = ? AND tm.is_developer = 1
+    ');
+    $stmt->execute([$teamId]);
+
+    return $stmt->fetchAll();
+}
+
+/**
+ * Return the merged, deduplicated list of summary email recipients.
+ *
+ * Sources (applied in priority order for dedup):
+ *   1. External team_recipients rows (have unsubscribe token)
+ *   2. is_recipient=1 team members
+ *   3. All developer members (only when team.summary_to_all_developers = 1)
+ *
+ * Dedup is case-insensitive. External rows (with unsubscribe token) take
+ * priority over developer-only entries when the same email appears in both.
+ *
+ * @param array $team Full team row (must include summary_to_all_developers).
+ */
+function getMergedRecipients(PDO $pdo, array $team): array
+{
+    $teamId = (int) $team['id'];
+
+    // Source 1: explicit external recipients (include id + unsubscribe_token).
     $stmt = $pdo->prepare('SELECT id, email, display_name, unsubscribe_token FROM team_recipients WHERE team_id = ?');
     $stmt->execute([$teamId]);
     $external = $stmt->fetchAll();
 
-    // Member recipients (is_recipient = 1).
+    // Source 2: is_recipient=1 members.
     $stmt2 = $pdo->prepare('
-        SELECT u.email, u.display_name
+        SELECT u.email, u.display_name, NULL AS unsubscribe_token
         FROM team_members tm
         JOIN users u ON u.id = tm.user_id
         WHERE tm.team_id = ? AND tm.is_recipient = 1
@@ -145,11 +182,17 @@ function getMergedRecipients(PDO $pdo, int $teamId): array
     $stmt2->execute([$teamId]);
     $members = $stmt2->fetchAll();
 
-    // Merge and deduplicate case-insensitively.
+    // Source 3: all developer members (only when flag is set).
+    $developers = !empty($team['summary_to_all_developers'])
+        ? queryDeveloperMembers($pdo, $teamId)
+        : [];
+
+    // Merge in priority order: external first (keeps unsubscribe token on dedup),
+    // then is_recipient members, then developer-auto entries.
     $seen   = [];
     $merged = [];
 
-    foreach (array_merge($external, $members) as $r) {
+    foreach (array_merge($external, $members, $developers) as $r) {
         $key = strtolower(trim((string) $r['email']));
 
         if (!isset($seen[$key])) {
@@ -170,8 +213,8 @@ function sendSummaryEmail(PDO $pdo, array $config, array $team, string $sendDate
         return;
     }
 
-    // Load merged recipients: external (team_recipients) + member recipients (is_recipient=1).
-    $recipients = getMergedRecipients($pdo, $teamId);
+    // Load merged recipients (pass full $team for summary_to_all_developers flag access).
+    $recipients = getMergedRecipients($pdo, $team);
 
     if (empty($recipients)) {
         return; // AC-6: no recipients — summary_sent row already inserted; no error.
@@ -214,10 +257,17 @@ function sendSummaryEmail(PDO $pdo, array $config, array $team, string $sendDate
         $toName = str_replace(["\r", "\n"], ' ', (string) ($recipient['display_name'] ?? $to));
 
         // For external recipients (have an id column): ensure unsubscribe token + generate URL.
-        $unsubscribeUrl = null;
-        if (isset($recipient['id'])) {
+        // Unsubscribe URL logic:
+        //   - External recipient with pre-generated token: use it directly
+        //   - External recipient without token (legacy row): lazy-generate via ensureUnsubscribeToken()
+        //   - Developer-auto recipient (no id): no unsubscribe URL (opt-out via profile)
+        if (!empty($recipient['unsubscribe_token'])) {
+            $unsubscribeUrl = $appUrl . '/unsubscribe.php?token=' . urlencode($recipient['unsubscribe_token']);
+        } elseif (isset($recipient['id'])) {
             $unsub_token    = ensureUnsubscribeToken($pdo, (int) $recipient['id']);
             $unsubscribeUrl = $appUrl . '/unsubscribe.php?token=' . urlencode($unsub_token);
+        } else {
+            $unsubscribeUrl = null; // Developer-auto: opt out via profile.php
         }
 
         // Render body per recipient (unsubscribe URL differs per external recipient).

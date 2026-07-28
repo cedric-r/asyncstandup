@@ -30,8 +30,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($name === '') { $errors[] = 'Team name is required.'; }
     if (!in_array($timezone, $allTzs, true)) { $errors[] = 'Invalid timezone.'; }
     if (!preg_match('/^\d{2}:\d{2}$/', $standupTime)) { $errors[] = 'Standup time must be HH:MM.'; }
+    $summaryToAllDevelopers = isset($_POST['summary_to_all_developers']) ? 1 : 0;
+
     if (empty($errors)) {
-        updateTeam($pdo, $teamId, $name, $timezone, $standupTime . ':00');
+        updateTeam($pdo, $teamId, $name, $timezone, $standupTime . ':00', $summaryToAllDevelopers);
         setFlash('success', 'Team settings updated.');
         header('Location: /teams/edit.php?id=' . $teamId);
         exit;
@@ -75,6 +77,15 @@ ob_start();
       <input type="time" name="standup_time" required class="<?= $inp ?>"
              value="<?= htmlspecialchars($_POST['standup_time'] ?? substr($team['standup_time'], 0, 5), ENT_QUOTES, 'UTF-8') ?>">
     </div>
+  </div>
+  <div class="mt-2">
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="summary_to_all_developers" value="1"
+             <?= !empty($team['summary_to_all_developers']) ? 'checked' : '' ?>
+             class="h-4 w-4 accent-indigo-600">
+      <span class="text-sm text-gray-700">Send daily summary to all developer members automatically</span>
+    </label>
+    <p class="text-xs text-gray-400 mt-1 ml-6">Developers receive summaries without being individually added as recipients. They can opt out via their profile.</p>
   </div>
   <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm">Save</button>
 </form>

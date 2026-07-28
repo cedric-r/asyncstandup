@@ -377,3 +377,46 @@ The initial implementation used `$hideNav = true` on auth/token pages (login, re
 2. **Template rewrites must audit every `htmlspecialchars()` call** — cosmetic-only rewrites are high-risk for accidentally stripping escaping; Code Reviewer spot-check is essential.
 3. **Nav consistency is architecture** — opt-in (always show, context-aware) > opt-out (`$hideNav = true` per page); design correctly from the start.
 4. **No tests break on cosmetic changes** — zero HTML assertions in the test suite; well-isolated tests enable fearless UI iteration.
+
+---
+
+# RETRO addendum — US-20: Recipient Self-Service Unsubscribe
+
+**Branch**: `feature/asyncstandup-unsubscribe` → `main`
+**Review cycles**: 1 (CLEAN PASS) | **Plan amendments**: 0
+
+## What went well
+
+- CLEAN PASS on Cycle 1 — all 8 files implemented correctly; 51 tests pass.
+- `tests/schema-sqlite.sql` pre-listed per US-17 RETRO lesson — zero scope amendments from this.
+- `ensureUnsubscribeToken()` lazy-generation pattern (UPDATE WHERE id; idempotent) was correct first attempt.
+- IDOR guard on profile unsubscribe (`SELECT 1 WHERE team_id=? AND user_id=? AND is_recipient=1` before UPDATE) implemented without prompting.
+- CSS nav bug (`<nav>` → `<div>` in team-nav.php) caught and fixed on the feature branch before merge.
+
+## Lessons learned (US-20 summary)
+
+1. **CSPRNG token + UNIQUE constraint is the correct unsubscribe token pattern** — `bin2hex(random_bytes(32))` with `UNIQUE` DB constraint; lazy generation at send time is safe and correct.
+2. **IDOR guard on every profile POST that modifies team membership** — always verify `(team_id, user_id, flag=expected_value)` before any UPDATE; this is an established pattern.
+3. **Pre-listing `tests/schema-sqlite.sql` alongside `db/schema.sql` = zero amendments** — the lesson from US-17 holds; the pre-list discipline eliminates a predictable amendment cycle.
+4. **Two `<nav>` elements on the same page cause Tailwind link-color inheritance conflicts** — use `<div>` for secondary navigation widgets that are not landmark nav elements; the outer layout `<nav>` is the only semantic nav per page.
+
+---
+
+# RETRO addendum — US-21: Send Summary to All Developers Toggle
+
+**Branch**: `feature/asyncstandup-summary-all` → `main`
+**Review cycles**: 1 (CLEAN PASS) | **Plan amendments**: 0
+
+## What went well
+
+- CLEAN PASS. `DEFAULT 0` migration = zero-disruption to existing teams.
+- Three-source merge with explicit priority order worked correctly first attempt.
+- `tests/schema-sqlite.sql` pre-listed — no amendment needed.
+
+## Lessons learned (US-21 summary)
+
+1. **Signature changes to widely-called functions are breaking** — `getMergedRecipients(int $teamId)` → `getMergedRecipients(array $team)` required updating 4 existing tests. Document API contract in PHPDoc before changing; consider a `$teamId` + `int $flag` signature instead of passing the full array to avoid coupling callers to the team row shape.
+
+2. **`DEFAULT 0` schema migrations need no UPDATE script** — when adding a boolean flag column that should default to "feature off", `NOT NULL DEFAULT 0` means all existing rows get 0 automatically. Document this explicitly in the migration note so operators don't run a redundant UPDATE.
+
+3. **Three-source dedup priority must be documented in code** — comment in `getMergedRecipients()` explains: external > is_recipient > developer-auto. Without this comment, future maintainers may change the `array_merge()` order and break the priority contract silently.

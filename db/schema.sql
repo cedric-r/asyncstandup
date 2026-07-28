@@ -33,13 +33,14 @@ CREATE TABLE IF NOT EXISTS org_members (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS teams (
-    id           INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    org_id       INT UNSIGNED NOT NULL,
-    name         VARCHAR(255) NOT NULL,
-    timezone     VARCHAR(50) NOT NULL,
-    standup_time TIME NOT NULL,
-    created_by   INT UNSIGNED NULL,
-    created_at   DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP()),
+    id                        INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    org_id                    INT UNSIGNED NOT NULL,
+    name                      VARCHAR(255) NOT NULL,
+    timezone                  VARCHAR(50) NOT NULL,
+    standup_time              TIME NOT NULL,
+    summary_to_all_developers TINYINT(1) NOT NULL DEFAULT 0,
+    created_by                INT UNSIGNED NULL,
+    created_at                DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP()),
     FOREIGN KEY (org_id)     REFERENCES organisations(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -167,3 +168,6 @@ UPDATE users SET account_status = 'approved' WHERE account_status = 'pending';
 
 -- US-20: unsubscribe token for team_recipients
 ALTER TABLE team_recipients ADD COLUMN unsubscribe_token VARCHAR(64) NULL UNIQUE;
+
+-- US-21: send summary to all developers flag
+ALTER TABLE teams ADD COLUMN summary_to_all_developers TINYINT(1) NOT NULL DEFAULT 0;

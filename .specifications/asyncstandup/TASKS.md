@@ -786,3 +786,52 @@ Phase 11 (password reset)
      - [ ] Profile: seed `is_recipient=1`; confirm list appears; "Remove me" sets to 0; list updates
      - [ ] AC-7: user in both `team_members (is_recipient=1)` and `team_recipients` → profile Remove me only affects team_members row
      - [ ] `git commit -m "feat(us-20): recipient self-service unsubscribe and profile subscription management"`
+
+---
+
+## Phase 21: Summary to All Developers Setting (US-21)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+### Tasks
+125. Update schema files ⚠️ **Path B — additive**
+     - [ ] `db/schema.sql`: add `summary_to_all_developers TINYINT(1) NOT NULL DEFAULT 0` to `CREATE TABLE teams`; add ALTER TABLE migration note comment
+     - [ ] `tests/schema-sqlite.sql`: add `summary_to_all_developers INTEGER NOT NULL DEFAULT 0` to teams table
+
+126. Add `queryDeveloperMembers(PDO $pdo, int $teamId): array` to `src/SummaryEmailer.php` ⚠️ **Path B**
+     - [ ] SELECT `u.email`, `u.display_name`, `NULL AS unsubscribe_token` from team_members JOIN users WHERE is_developer = 1
+
+127. Extend `getMergedRecipients(PDO, array $team): array` ⚠️ **Path B**
+     - [ ] Change signature from `int $teamId` to `array $team` (breaking change to call site — update all callers)
+     - [ ] When `$team['summary_to_all_developers']` is truthy: call `queryDeveloperMembers()` and merge into dedup list
+     - [ ] When falsy: same as before (external + is_recipient members only)
+     - [ ] Dedup applies across all three sources
+
+128. Update unsubscribe URL logic in send loop ⚠️ **Path B**
+     - [ ] Check `$recipient['unsubscribe_token']` and `$recipient['id']` to determine whether to build URL
+     - [ ] Developer-auto recipients (`id` absent, `unsubscribe_token = NULL`): `$unsubscribeUrl = ''`
+     - [ ] Update `standup_summary.php` template: render unsubscribe line only `if (!empty($unsubscribe_url))`
+
+129. Ensure cron team query includes `summary_to_all_developers` ⚠️ **Path B**
+     - [ ] Check `getDueTeams()` SELECT in `src/StandupEmailer.php` or `cron/send_standups.php`
+     - [ ] Add `summary_to_all_developers` to SELECT if absent; pass full `$team` array to `getMergedRecipients()`
+
+130. Add checkbox to `public/teams/edit.php` ⚠️ **Path B**
+     - [ ] Checkbox `name="summary_to_all_developers"` checked when `$team['summary_to_all_developers'] = 1`
+     - [ ] POST: `$summaryToAllDevelopers = isset($_POST['summary_to_all_developers']) ? 1 : 0`
+     - [ ] Pass to `updateTeam()`
+
+131. Update `updateTeam()` in `src/TeamRepository.php` ⚠️ **Path B**
+     - [ ] Add `summary_to_all_developers = ?` to UPDATE SQL
+     - [ ] Add `int $summaryToAllDevelopers` parameter; bind correctly
+
+132. Add test cases to `tests/RepositoryTest.php` ⚠️ **Path B**
+     - [ ] `getMergedRecipients()` with `summary_to_all_developers = 0` → developer NOT in result
+     - [ ] `getMergedRecipients()` with `summary_to_all_developers = 1` → developer email included
+     - [ ] `summary_to_all_developers = 1`, developer email = external recipient email → deduplicated to 1
+     - [ ] `summary_to_all_developers = 1`, developer email = `is_recipient` member email → deduplicated to 1
+
+133. Verify and commit
+     - [ ] Run `composer test` → all tests pass
+     - [ ] Manually: enable flag on team; trigger summary cron; confirm developer receives email without unsubscribe link
+     - [ ] Manually: disable flag; confirm developer no longer receives summary
+     - [ ] `git commit -m "feat(us-21): summary_to_all_developers team setting"`

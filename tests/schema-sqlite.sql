@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS teams (
     name         TEXT NOT NULL,
     timezone     TEXT NOT NULL,
     standup_time TEXT NOT NULL,
+    summary_to_all_developers INTEGER NOT NULL DEFAULT 0,
     created_by   INTEGER NULL,
     created_at   TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (org_id)     REFERENCES organisations(id),

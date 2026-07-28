@@ -407,7 +407,7 @@ class RepositoryTest extends TestCase
         $this->pdo->prepare('INSERT INTO team_recipients (team_id, email, display_name) VALUES (?, ?, ?)')
             ->execute([$teamId, 'ext@test.com', 'External']);
 
-        $result = getMergedRecipients($this->pdo, $teamId);
+        $result = getMergedRecipients($this->pdo, ['id' => $teamId, 'summary_to_all_developers' => 0]);
 
         self::assertCount(1, $result);
         self::assertSame('ext@test.com', $result[0]['email']);
@@ -423,7 +423,7 @@ class RepositoryTest extends TestCase
             'INSERT INTO team_members (team_id, user_id, is_owner, is_developer, is_recipient) VALUES (?, ?, 0, 0, 1)'
         )->execute([$teamId, $recipientId]);
 
-        $result = getMergedRecipients($this->pdo, $teamId);
+        $result = getMergedRecipients($this->pdo, ['id' => $teamId, 'summary_to_all_developers' => 0]);
 
         $emails = array_column($result, 'email');
         self::assertContains('member-recip@test.com', $emails);
@@ -443,7 +443,7 @@ class RepositoryTest extends TestCase
             'INSERT INTO team_members (team_id, user_id, is_owner, is_developer, is_recipient) VALUES (?, ?, 0, 0, 1)'
         )->execute([$teamId, $memberId]);
 
-        $result = getMergedRecipients($this->pdo, $teamId);
+        $result = getMergedRecipients($this->pdo, ['id' => $teamId, 'summary_to_all_developers' => 0]);
 
         // After case-insensitive dedup, only 1 entry should remain.
         self::assertCount(1, $result, 'Same email in different cases must be deduplicated to 1 entry');
@@ -463,7 +463,7 @@ class RepositoryTest extends TestCase
             'INSERT INTO team_members (team_id, user_id, is_owner, is_developer, is_recipient) VALUES (?, ?, 0, 0, 1)'
         )->execute([$teamId, $memberId]);
 
-        $result = getMergedRecipients($this->pdo, $teamId);
+        $result = getMergedRecipients($this->pdo, ['id' => $teamId, 'summary_to_all_developers' => 0]);
 
         self::assertCount(2, $result, 'Two distinct emails from external + member should yield 2 entries');
         $emails = array_column($result, 'email');
@@ -631,5 +631,83 @@ class RepositoryTest extends TestCase
         $second = ensureUnsubscribeToken($this->pdo, $recipId);
 
         self::assertSame($first, $second, 'Calling ensureUnsubscribeToken twice must return the same token');
+    }
+
+    // =========================================================================
+    // getMergedRecipients() with summary_to_all_developers flag (US-21)
+    // =========================================================================
+
+    private function seedTeamWithFlag(PDO $pdo, int $flag): array
+    {
+        $ownerId = seedUser($pdo, 'owner-merged-' . uniqid() . '@test.com', 'Owner');
+        $orgId   = seedOrg($pdo, $ownerId);
+        // Seed team directly to set summary_to_all_developers.
+        $pdo->prepare('INSERT INTO teams (org_id, name, timezone, standup_time, summary_to_all_developers, created_by) VALUES (?, ?, ?, ?, ?, ?)')
+            ->execute([$orgId, 'Test Team', 'UTC', '09:00:00', $flag, $ownerId]);
+        $teamId = (int) $pdo->lastInsertId();
+        seedTeamMember($pdo, $teamId, $ownerId, 1, 1); // owner is_developer=1
+
+        return ['id' => $teamId, 'org_id' => $orgId, 'summary_to_all_developers' => $flag];
+    }
+
+    public function testGetMergedRecipientsFlagOffExcludesDeveloper(): void
+    {
+        $team     = $this->seedTeamWithFlag($this->pdo, 0);
+        $devId    = seedUser($this->pdo, 'dev-flag-off@test.com', 'Dev Flag Off');
+        seedTeamMember($this->pdo, $team['id'], $devId, 0, 1); // is_developer=1
+
+        $results = getMergedRecipients($this->pdo, $team);
+
+        $emails = array_column($results, 'email');
+        self::assertNotContains('dev-flag-off@test.com', $emails, 'Developer must not appear when flag=0');
+    }
+
+    public function testGetMergedRecipientsFlagOnIncludesDeveloper(): void
+    {
+        $team  = $this->seedTeamWithFlag($this->pdo, 1);
+        $devId = seedUser($this->pdo, 'dev-flag-on@test.com', 'Dev Flag On');
+        seedTeamMember($this->pdo, $team['id'], $devId, 0, 1); // is_developer=1
+
+        $results = getMergedRecipients($this->pdo, $team);
+
+        $emails = array_column($results, 'email');
+        self::assertContains('dev-flag-on@test.com', $emails, 'Developer must appear when flag=1');
+    }
+
+    public function testGetMergedRecipientsFlagOnDeduplicatesDeveloperWithExternalRecipient(): void
+    {
+        $team  = $this->seedTeamWithFlag($this->pdo, 1);
+        $devId = seedUser($this->pdo, 'shared-ext@test.com', 'Shared Dev');
+        seedTeamMember($this->pdo, $team['id'], $devId, 0, 1);
+
+        // External recipient with same email.
+        $this->pdo->prepare('INSERT INTO team_recipients (team_id, email, display_name) VALUES (?, ?, ?)')
+            ->execute([$team['id'], 'shared-ext@test.com', 'External']);
+
+        $results = getMergedRecipients($this->pdo, $team);
+
+        $emails = array_column($results, 'email');
+        $count  = count(array_filter($emails, fn($e) => strtolower($e) === 'shared-ext@test.com'));
+        self::assertSame(1, $count, 'Same email in team_recipients + developer must be deduplicated to 1 entry');
+
+        // External row takes priority (has id / unsubscribe_token capability).
+        $matching = array_filter($results, fn($r) => strtolower($r['email']) === 'shared-ext@test.com');
+        $first    = array_values($matching)[0];
+        self::assertTrue(isset($first['id']), 'External recipient row (with id) must take dedup priority');
+    }
+
+    public function testGetMergedRecipientsFlagOnDeduplicatesDeveloperWithIsRecipientMember(): void
+    {
+        $team  = $this->seedTeamWithFlag($this->pdo, 1);
+        $devId = seedUser($this->pdo, 'shared-member@test.com', 'Shared Member');
+        // Member with BOTH is_developer=1 AND is_recipient=1.
+        $this->pdo->prepare('INSERT INTO team_members (team_id, user_id, is_owner, is_developer, is_recipient) VALUES (?, ?, 0, 1, 1)')
+            ->execute([$team['id'], $devId]);
+
+        $results = getMergedRecipients($this->pdo, $team);
+
+        $emails = array_column($results, 'email');
+        $count  = count(array_filter($emails, fn($e) => strtolower($e) === 'shared-member@test.com'));
+        self::assertSame(1, $count, 'Developer who is also is_recipient must appear exactly once');
     }
 }
