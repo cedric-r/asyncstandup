@@ -31,7 +31,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Invalid email address.';
         } else {
             try {
-                addRecipient($pdo, $teamId, $email, $displayName, (int) $_SESSION['user_id']);
+                // Generate unsubscribe token immediately on add.
+                $unsubToken = bin2hex(random_bytes(32));
+                $pdo->prepare('
+                    INSERT INTO team_recipients (team_id, email, display_name, added_by, unsubscribe_token)
+                    VALUES (?, ?, ?, ?, ?)
+                ')->execute([$teamId, trim($email), trim($displayName), (int) $_SESSION['user_id'], $unsubToken]);
                 setFlash('success', 'Recipient added.');
                 header('Location: /teams/recipients.php?team_id=' . $teamId);
                 exit;

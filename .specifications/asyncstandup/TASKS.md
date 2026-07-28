@@ -737,3 +737,52 @@ Phase 11 (password reset)
      - [ ] Check all pages at 1280px — layout correct; no broken spacing
      - [ ] Verify all PHP logic unchanged (form submissions, redirects, flash messages all still work)
      - [ ] `git commit -m "feat(us-19): UI redesign with Tailwind CSS"`
+
+---
+
+## Phase 20: Recipient Self-Service / Unsubscribe (US-20)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+### Tasks
+117. Update `db/schema.sql` — add `unsubscribe_token` column ⚠️ **Path B — additive**
+     - [ ] Add `unsubscribe_token VARCHAR(64) NULL UNIQUE` to `CREATE TABLE team_recipients`
+     - [ ] Add ALTER TABLE migration note comment for existing deployments
+     - [ ] Document in README: run `UPDATE team_recipients SET unsubscribe_token = ...` for existing rows (PHP helper script or manual)
+
+118. Generate token on recipient add in `public/teams/recipients.php` ⚠️ **Path B**
+     - [ ] Generate `bin2hex(random_bytes(32))` before INSERT
+     - [ ] Include `unsubscribe_token` in INSERT statement
+
+119. Add `ensureUnsubscribeToken(PDO, int $recipientId): string` to `src/SummaryEmailer.php` ⚠️ **Path B**
+     - [ ] SELECT `unsubscribe_token` by recipient `id`
+     - [ ] If NULL: generate token; UPDATE row; return new token
+     - [ ] If set: return existing token
+
+120. Update recipient query in `src/SummaryEmailer.php` and pass unsubscribe URL to template ⚠️ **Path B**
+     - [ ] Add `id` to `SELECT` in recipient query (`SELECT id, email, display_name, unsubscribe_token FROM team_recipients`)
+     - [ ] Per recipient: call `ensureUnsubscribeToken()`; build `$unsubscribeUrl = $config['app']['base_url'] . '/unsubscribe.php?token=' . urlencode($token)`
+     - [ ] Pass `$unsubscribeUrl` to template vars array
+
+121. Update `templates/email/standup_summary.php` ⚠️ **Path B — additive**
+     - [ ] Append unsubscribe line at bottom: `---\nTo stop receiving these summaries: <?= $unsubscribe_url ?>`
+     - [ ] `$unsubscribe_url` is plain-text URL; no `h()` needed in plain-text template
+
+122. Create `public/unsubscribe.php`
+     - [ ] `session_start()` at top (needed for CSRF); no `requireLogin()`
+     - [ ] GET: validate `$token = $_GET['token'] ?? ''`; lookup in `team_recipients` JOIN teams JOIN organisations; show error on not-found; render confirm card with org + team name
+     - [ ] POST: `validateCsrfOrFail()`; re-load token from DB (re-validate); `DELETE FROM team_recipients WHERE id = ?`; show "You have been unsubscribed."
+     - [ ] Hidden token field in confirm form; hidden CSRF token
+     - [ ] Centred card layout (Tailwind from US-19)
+
+123. Add "My summary subscriptions" to `public/profile.php` ⚠️ **Path B — additive**
+     - [ ] GET: query `team_members JOIN teams JOIN organisations WHERE user_id = ? AND is_recipient = 1`; assign to `$subscriptions`
+     - [ ] Render list only when `!empty($subscriptions)`; each row: org/team name + "Remove me" POST form
+     - [ ] POST (`?action=unsubscribe_team`): validate CSRF; cast `$teamId = (int)$_POST['team_id']`; verify `(team_id, user_id, is_recipient=1)` exists (IDOR guard); `UPDATE team_members SET is_recipient = 0`; flash "Removed from summary list."; PRG redirect
+
+124. Verify and commit
+     - [ ] Add a recipient; send summary; confirm unsubscribe link appears in email
+     - [ ] Click link; confirm page shows org + team; confirm POST deletes row
+     - [ ] Invalid token GET → error message; no crash
+     - [ ] Profile: seed `is_recipient=1`; confirm list appears; "Remove me" sets to 0; list updates
+     - [ ] AC-7: user in both `team_members (is_recipient=1)` and `team_recipients` → profile Remove me only affects team_members row
+     - [ ] `git commit -m "feat(us-20): recipient self-service unsubscribe and profile subscription management"`

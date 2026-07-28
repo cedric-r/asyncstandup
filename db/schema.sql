@@ -66,12 +66,13 @@ CREATE TABLE IF NOT EXISTS team_questions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS team_recipients (
-    id           INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    team_id      INT UNSIGNED NOT NULL,
-    email        VARCHAR(255) NOT NULL,
-    display_name VARCHAR(100),
-    added_by     INT UNSIGNED,
-    created_at   DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP()),
+    id                INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    team_id           INT UNSIGNED NOT NULL,
+    email             VARCHAR(255) NOT NULL,
+    display_name      VARCHAR(100),
+    added_by          INT UNSIGNED,
+    unsubscribe_token VARCHAR(64) NULL UNIQUE,
+    created_at        DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP()),
     UNIQUE KEY uq_team_recipient (team_id, email),
     FOREIGN KEY (team_id)  REFERENCES teams(id),
     FOREIGN KEY (added_by) REFERENCES users(id)
@@ -163,3 +164,6 @@ ALTER TABLE users
 
 -- Approve all existing users so they are not locked out after migration.
 UPDATE users SET account_status = 'approved' WHERE account_status = 'pending';
+
+-- US-20: unsubscribe token for team_recipients
+ALTER TABLE team_recipients ADD COLUMN unsubscribe_token VARCHAR(64) NULL UNIQUE;

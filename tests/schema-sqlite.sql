@@ -72,11 +72,12 @@ CREATE TABLE IF NOT EXISTS team_questions (
 
 CREATE TABLE IF NOT EXISTS team_recipients (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    team_id      INTEGER NOT NULL,
-    email        TEXT NOT NULL,
-    display_name TEXT,
-    added_by     INTEGER,
-    created_at   TEXT NOT NULL DEFAULT '',
+    team_id           INTEGER NOT NULL,
+    email             TEXT NOT NULL,
+    display_name      TEXT,
+    added_by          INTEGER,
+    unsubscribe_token TEXT NULL UNIQUE,
+    created_at        TEXT NOT NULL DEFAULT '',
     UNIQUE(team_id, email),
     FOREIGN KEY (team_id)  REFERENCES teams(id),
     FOREIGN KEY (added_by) REFERENCES users(id)

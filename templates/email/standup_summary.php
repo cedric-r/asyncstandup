@@ -41,3 +41,8 @@ No team members to report on.
 
 ---
 AsyncStandUp
+<?php if (!empty($unsubscribeUrl)): ?>
+
+To stop receiving these summaries:
+<?= $unsubscribeUrl ?>
+<?php endif; ?>

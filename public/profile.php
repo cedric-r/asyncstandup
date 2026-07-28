@@ -21,7 +21,23 @@ $action = $_POST['action'] ?? '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     validateCsrfToken($_POST['csrf_token'] ?? '');
 
-    if ($action === 'delete_account') {
+    if ($action === 'unsubscribe_team') {
+        $teamId = (int) ($_POST['team_id'] ?? 0);
+        // IDOR guard: verify user actually has is_recipient=1 for this team.
+        $check = $pdo->prepare(
+            'SELECT 1 FROM team_members WHERE team_id = ? AND user_id = ? AND is_recipient = 1'
+        );
+        $check->execute([$teamId, (int) $_SESSION['user_id']]);
+        if (!$check->fetch()) {
+            $errors[] = 'Not subscribed to that team.';
+        } else {
+            $pdo->prepare('UPDATE team_members SET is_recipient = 0 WHERE team_id = ? AND user_id = ?')
+                ->execute([$teamId, (int) $_SESSION['user_id']]);
+            setFlash('success', 'Removed from summary list.');
+            header('Location: /profile.php');
+            exit;
+        }
+    } elseif ($action === 'delete_account') {
         $confirmPw = $_POST['confirm_password'] ?? '';
         if (deleteUserAccount($pdo, (int) $_SESSION['user_id'], $confirmPw)) {
             session_destroy();
@@ -68,6 +84,18 @@ $flash       = getFlash();
 $allTzs      = DateTimeZone::listIdentifiers();
 $currentUser = $user;
 $inp         = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none';
+
+// Load summary subscriptions (teams where user has is_recipient=1).
+$subStmt = $pdo->prepare("
+    SELECT t.id AS team_id, t.name AS team_name, o.name AS org_name
+    FROM team_members tm
+    JOIN teams t         ON t.id = tm.team_id
+    JOIN organisations o ON o.id = t.org_id
+    WHERE tm.user_id = ? AND tm.is_recipient = 1
+    ORDER BY o.name, t.name
+");
+$subStmt->execute([(int) $_SESSION['user_id']]);
+$subscriptions = $subStmt->fetchAll();
 
 ob_start();
 ?>
@@ -121,6 +149,26 @@ ob_start();
   <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm">Change password</button>
 </form>
 </div>
+
+<?php if (!empty($subscriptions)): ?>
+<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-4">
+<h2 class="font-semibold text-gray-900 mb-2">My summary subscriptions</h2>
+<p class="text-sm text-gray-500 mb-4">Teams whose standup summaries you receive. Owners control whether you are added.</p>
+<ul class="divide-y divide-gray-100">
+<?php foreach ($subscriptions as $sub): ?>
+<li class="flex items-center justify-between py-3">
+  <span class="text-sm text-gray-900"><?= h($sub['org_name']) ?> / <?= h($sub['team_name']) ?></span>
+  <form method="POST" action="/profile.php">
+    <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+    <input type="hidden" name="action" value="unsubscribe_team">
+    <input type="hidden" name="team_id" value="<?= (int) $sub['team_id'] ?>">
+    <button type="submit" class="text-sm text-red-600 hover:text-red-800 underline">Remove me</button>
+  </form>
+</li>
+<?php endforeach; ?>
+</ul>
+</div>
+<?php endif; ?>
 
 <div class="bg-white rounded-lg shadow-sm border border-red-200 p-6">
 <h2 class="font-semibold text-red-700 mb-2">Danger zone</h2>

@@ -103,10 +103,35 @@ function assembleSummaryData(PDO $pdo, int $teamId, string $sendDate): array
  *
  * @return array{email: string, display_name: string|null}[]
  */
+/**
+ * Ensure an external recipient has an unsubscribe token; generate + save if absent.
+ *
+ * Lazy-generation pattern: safe to call at send time.
+ * Uses bin2hex(random_bytes(32)) — CSPRNG; idempotent (UPDATE WHERE id).
+ *
+ * @return string The 64-char hex unsubscribe token.
+ */
+function ensureUnsubscribeToken(PDO $pdo, int $recipientId): string
+{
+    $stmt = $pdo->prepare('SELECT id, unsubscribe_token FROM team_recipients WHERE id = ?');
+    $stmt->execute([$recipientId]);
+    $row = $stmt->fetch();
+
+    if ($row !== false && !empty($row['unsubscribe_token'])) {
+        return (string) $row['unsubscribe_token'];
+    }
+
+    $token = bin2hex(random_bytes(32));
+    $pdo->prepare('UPDATE team_recipients SET unsubscribe_token = ? WHERE id = ?')
+        ->execute([$token, $recipientId]);
+
+    return $token;
+}
+
 function getMergedRecipients(PDO $pdo, int $teamId): array
 {
-    // External recipients.
-    $stmt = $pdo->prepare('SELECT email, display_name FROM team_recipients WHERE team_id = ?');
+    // External recipients — include id and unsubscribe_token for lazy generation at send time.
+    $stmt = $pdo->prepare('SELECT id, email, display_name, unsubscribe_token FROM team_recipients WHERE team_id = ?');
     $stmt->execute([$teamId]);
     $external = $stmt->fetchAll();
 
@@ -181,17 +206,25 @@ function sendSummaryEmail(PDO $pdo, array $config, array $team, string $sendDate
         }
     }
 
-    // Render email body.
-    ob_start();
-    extract(compact('teamName', 'sendDate', 'questions', 'submitterData', 'nonSubmitters'), EXTR_SKIP);
-    include __DIR__ . '/../templates/email/standup_summary.php';
-    $body = (string) ob_get_clean();
-
-    $subject = "AsyncStandUp Summary — {$teamName} ({$sendDate})";
+    $subject  = "AsyncStandUp Summary — {$teamName} ({$sendDate})";
+    $appUrl   = rtrim($config['app_url'] ?? '', '/');
 
     foreach ($recipients as $recipient) {
-        $to       = str_replace(["\r", "\n"], ' ', (string) $recipient['email']);
-        $toName   = str_replace(["\r", "\n"], ' ', (string) ($recipient['display_name'] ?? $to));
+        $to     = str_replace(["\r", "\n"], ' ', (string) $recipient['email']);
+        $toName = str_replace(["\r", "\n"], ' ', (string) ($recipient['display_name'] ?? $to));
+
+        // For external recipients (have an id column): ensure unsubscribe token + generate URL.
+        $unsubscribeUrl = null;
+        if (isset($recipient['id'])) {
+            $unsub_token    = ensureUnsubscribeToken($pdo, (int) $recipient['id']);
+            $unsubscribeUrl = $appUrl . '/unsubscribe.php?token=' . urlencode($unsub_token);
+        }
+
+        // Render body per recipient (unsubscribe URL differs per external recipient).
+        ob_start();
+        extract(compact('teamName', 'sendDate', 'questions', 'submitterData', 'nonSubmitters', 'unsubscribeUrl'), EXTR_SKIP);
+        include __DIR__ . '/../templates/email/standup_summary.php';
+        $body = (string) ob_get_clean();
 
         try {
             sendMail($config, $to, $toName, $subject, $body);

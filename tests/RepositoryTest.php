@@ -577,4 +577,59 @@ class RepositoryTest extends TestCase
 
         self::assertSame('rejected', $result);
     }
+
+    // =========================================================================
+    // ensureUnsubscribeToken() (US-20)
+    // =========================================================================
+
+    private function seedRecipientRow(PDO $pdo, int $teamId, string $email, ?string $token = null): int
+    {
+        $pdo->prepare(
+            'INSERT INTO team_recipients (team_id, email, display_name, unsubscribe_token) VALUES (?, ?, ?, ?)'
+        )->execute([$teamId, $email, null, $token]);
+        return (int) $pdo->lastInsertId();
+    }
+
+    public function testEnsureUnsubscribeTokenGeneratesWhenNull(): void
+    {
+        $userId    = seedUser($this->pdo, 'recip-gen@test.com', 'Recip Gen');
+        $orgId     = seedOrg($this->pdo, $userId);
+        $teamId    = seedTeam($this->pdo, $orgId, $userId);
+        $recipId   = $this->seedRecipientRow($this->pdo, $teamId, 'ext@test.com', null);
+
+        $token = ensureUnsubscribeToken($this->pdo, $recipId);
+
+        self::assertIsString($token);
+        self::assertSame(64, strlen($token), 'Token must be 64 hex chars (bin2hex of 32 bytes)');
+
+        // DB row must be updated with the token.
+        $row = $this->pdo->query("SELECT unsubscribe_token FROM team_recipients WHERE id = {$recipId}")->fetch();
+        self::assertSame($token, $row['unsubscribe_token']);
+    }
+
+    public function testEnsureUnsubscribeTokenReturnsExistingToken(): void
+    {
+        $existingToken = bin2hex(random_bytes(32));
+        $userId        = seedUser($this->pdo, 'recip-existing@test.com', 'Recip Existing');
+        $orgId         = seedOrg($this->pdo, $userId);
+        $teamId        = seedTeam($this->pdo, $orgId, $userId);
+        $recipId       = $this->seedRecipientRow($this->pdo, $teamId, 'existing@test.com', $existingToken);
+
+        $returned = ensureUnsubscribeToken($this->pdo, $recipId);
+
+        self::assertSame($existingToken, $returned, 'Existing token must be returned unchanged');
+    }
+
+    public function testEnsureUnsubscribeTokenIsIdempotent(): void
+    {
+        $userId  = seedUser($this->pdo, 'recip-idem@test.com', 'Recip Idem');
+        $orgId   = seedOrg($this->pdo, $userId);
+        $teamId  = seedTeam($this->pdo, $orgId, $userId);
+        $recipId = $this->seedRecipientRow($this->pdo, $teamId, 'idem@test.com', null);
+
+        $first  = ensureUnsubscribeToken($this->pdo, $recipId);
+        $second = ensureUnsubscribeToken($this->pdo, $recipId);
+
+        self::assertSame($first, $second, 'Calling ensureUnsubscribeToken twice must return the same token');
+    }
 }
