@@ -346,3 +346,34 @@ Small UX request raised after review. Handled correctly: PLAN-AMENDMENT-10 commi
 2. **Multi-statement cascades must use `beginTransaction()`** — no exceptions; every multi-step cascade without a transaction is a data integrity bug.
 3. **Hot-fix files in branch diff → pre-list in IMPL-PLAN** — note context so Code Reviewer doesn't flag them as unplanned scope.
 4. **Test suite uses SQLite; verify MySQL compat manually** — especially for datetime functions, MySQL-specific syntax, and column type differences.
+
+---
+
+# RETRO addendum — US-19: Tailwind CSS UI Redesign
+
+**Branch**: `feature/asyncstandup-ui` → `main`
+**Review cycles**: 1 (CLEAN PASS) | **Plan amendments**: 0
+
+## What went well
+
+- CLEAN PASS on Cycle 1 — all 26 pages restyled in a single implementation commit with no functional regressions.
+- 48 tests, 98 assertions all passed — confirmed: zero HTML assertions in the test suite; cosmetic-only page rewrites have no impact on the test layer.
+- Context-aware unauthenticated nav (logo + Log in + Register) correctly handled in layout.php without per-page logic.
+- Tailwind Play CDN approach is right for a no-build PHP project in dev/staging.
+
+## What required adjustment during implementation
+
+### Additional requirement: nav on every page
+
+The initial implementation used `$hideNav = true` on auth/token pages (login, register, submit, forgot-password, reset-password). Mid-implementation the Team Lead added that the nav must appear on ALL pages, context-aware for unauthenticated state.
+
+**Fix**: removed the `if (!isset($hideNav) || !$hideNav)` conditional from `templates/layout.php`. Nav always renders. When `$currentUser` is null, the right side shows "Log in" + "Register" links instead of user controls. `$hideNav = true` removed from all 6 pages that set it.
+
+**Lesson**: Nav consistency is architecture, not decoration. An opt-out pattern (`$hideNav = true` per page) is fragile — easy to forget on new pages and easy to break when refactoring. The opt-in pattern (always show nav, context-aware state) is cleaner. Design nav consistency as an architectural constraint from the start.
+
+## Lessons learned (US-19 summary)
+
+1. **Tailwind Play CDN is not production-grade** — for production, compile a static CSS with `npx tailwindcss`; CDN is fine for dev/staging and no-build projects.
+2. **Template rewrites must audit every `htmlspecialchars()` call** — cosmetic-only rewrites are high-risk for accidentally stripping escaping; Code Reviewer spot-check is essential.
+3. **Nav consistency is architecture** — opt-in (always show, context-aware) > opt-out (`$hideNav = true` per page); design correctly from the start.
+4. **No tests break on cosmetic changes** — zero HTML assertions in the test suite; well-isolated tests enable fearless UI iteration.

@@ -21,7 +21,6 @@ $error  = null;
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Validation order: CSRF → CAPTCHA → login logic.
     validateCsrfToken($_POST['csrf_token'] ?? '');
 
     if (!captchaValidate($_POST['captcha_answer'] ?? '')) {
@@ -32,7 +31,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $result   = loginUser($pdo, $email, $password);
 
         if ($result === 'ok') {
-            // AC-3: if an invitation was pending, auto-accept it on login.
             if (!empty($_SESSION['pending_invite_token'])) {
                 require_once __DIR__ . '/../src/InvitationRepository.php';
                 $pendingToken = (string) $_SESSION['pending_invite_token'];
@@ -42,7 +40,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 setFlash('success', 'Welcome back!');
             }
-
             header('Location: /dashboard.php');
             exit;
         } elseif ($result === 'pending') {
@@ -59,54 +56,62 @@ $csrfToken = generateCsrfToken();
 $flash     = getFlash();
 $captcha   = captchaGetRandomQuestion();
 
-// Show pending message after registration (US-17).
 if (isset($_GET['registered'])) {
     $flash = ['type' => 'success', 'text' => 'Account created. Your registration is pending administrator approval. You will receive an email when approved.'];
 }
-
-// Show deletion message after account deleted (US-16).
 if (isset($_GET['deleted'])) {
     $flash = ['type' => 'success', 'text' => 'Your account has been deleted.'];
 }
 
 ob_start();
 ?>
-<h1 class="page-title">Log in</h1>
+<div class="min-h-screen flex items-center justify-center py-12">
+<div class="w-full max-w-md">
+  <h1 class="text-2xl font-bold text-gray-900 mb-2 text-center">Welcome back</h1>
+  <p class="text-sm text-gray-500 text-center mb-8">Log in to your AsyncStandUp account</p>
 
-<?php foreach ($errors as $err): ?>
-<div class="alert alert-error"><?= htmlspecialchars($err, ENT_QUOTES, 'UTF-8') ?></div>
-<?php endforeach; ?>
-<?php if ($error !== null): ?>
-<div class="alert alert-error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
-<?php endif; ?>
+  <?php foreach ($errors as $err): ?>
+  <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4 text-sm"><?= htmlspecialchars($err, ENT_QUOTES, 'UTF-8') ?></div>
+  <?php endforeach; ?>
+  <?php if ($error !== null): ?>
+  <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4 text-sm"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
+  <?php endif; ?>
 
-<div class="card">
-<form method="POST" action="/login.php">
-    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
-
-    <div class="form-group">
-        <label for="email">Email address</label>
-        <input type="email" id="email" name="email" required
-               value="<?= htmlspecialchars($_POST['email'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
-    </div>
-
-    <div class="form-group">
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password" required>
-    </div>
-
-    <div class="form-group">
-        <label for="captcha_answer">Security question: <?= htmlspecialchars($captcha['question'], ENT_QUOTES, 'UTF-8') ?></label>
-        <input type="text" id="captcha_answer" name="captcha_answer" autocomplete="off" required>
-    </div>
-
-    <button type="submit" class="btn btn-primary">Log in</button>
-</form>
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+    <form method="POST" action="/login.php" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+      <div>
+        <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+        <input type="email" id="email" name="email" required autofocus
+               value="<?= htmlspecialchars($_POST['email'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+      </div>
+      <div>
+        <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+        <input type="password" id="password" name="password" required
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+      </div>
+      <div>
+        <label for="captcha_answer" class="block text-sm font-medium text-gray-700 mb-1">
+          <?= htmlspecialchars($captcha['question'], ENT_QUOTES, 'UTF-8') ?>
+        </label>
+        <input type="text" id="captcha_answer" name="captcha_answer" autocomplete="off" required
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+      </div>
+      <button type="submit"
+              class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors">
+        Log in
+      </button>
+    </form>
+  </div>
+  <p class="text-center text-sm text-gray-500 mt-6">
+    Don't have an account? <a href="/register.php" class="text-indigo-600 hover:text-indigo-700 font-medium">Register</a>
+    &nbsp;·&nbsp;
+    <a href="/forgot-password.php" class="text-indigo-600 hover:text-indigo-700">Forgot password?</a>
+  </p>
 </div>
-
-<p class="mt-8">Don't have an account? <a href="/register.php">Register</a></p>
+</div>
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Log in';
-$hideNav   = true;
 include __DIR__ . '/../templates/layout.php';

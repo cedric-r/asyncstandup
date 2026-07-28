@@ -8,6 +8,7 @@ require_once __DIR__ . '/../src/Db.php';
 require_once __DIR__ . '/../src/Auth.php';
 require_once __DIR__ . '/../src/Csrf.php';
 require_once __DIR__ . '/../src/Mailer.php';
+require_once __DIR__ . '/../src/View.php';
 
 startSession();
 
@@ -18,8 +19,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $email = mb_strtolower(trim($_POST['email'] ?? ''));
 
-    // Attempt to find the user — run same code path regardless of existence
-    // to prevent email enumeration (AC-2).
     if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $stmt = $pdo->prepare('SELECT id, display_name FROM users WHERE email = ?');
         $stmt->execute([$email]);
@@ -29,12 +28,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $token    = createPasswordResetToken($pdo, (int) $user['id']);
             $resetUrl = rtrim($config['app_url'], '/') . '/reset-password.php?token=' . urlencode($token);
             $userName = $user['display_name'] ?: $email;
-
-            ob_start();
-            extract(['user_name' => $userName, 'reset_url' => $resetUrl, 'expires_minutes' => 60], EXTR_SKIP);
-            include __DIR__ . '/../templates/email/password_reset.php';
-            $body = (string) ob_get_clean();
-
+            $body     = renderEmailTemplate(
+                __DIR__ . '/../templates/email/password_reset.php',
+                ['user_name' => $userName, 'reset_url' => $resetUrl, 'expires_minutes' => 60]
+            );
             try {
                 sendMail($config, $email, $userName, 'Reset your AsyncStandUp password', $body);
             } catch (RuntimeException $e) {
@@ -43,7 +40,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Same flash for known + unknown email — no enumeration (AC-2).
     setFlash('success', 'If your email is registered, you will receive a reset link.');
     header('Location: /forgot-password.php');
     exit;
@@ -54,24 +50,27 @@ $flash     = getFlash();
 
 ob_start();
 ?>
-<h1 class="page-title">Forgot password</h1>
-
-<div class="card">
-<form method="POST" action="/forgot-password.php">
-    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
-
-    <div class="form-group">
-        <label for="email">Email address</label>
-        <input type="email" id="email" name="email" required autofocus>
-    </div>
-
-    <button type="submit" class="btn btn-primary">Send reset link</button>
-</form>
+<div class="min-h-screen flex items-center justify-center py-12">
+<div class="w-full max-w-md">
+  <h1 class="text-2xl font-bold text-gray-900 mb-2 text-center">Forgot password</h1>
+  <p class="text-sm text-gray-500 text-center mb-8">Enter your email and we'll send you a reset link.</p>
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+    <form method="POST" action="/forgot-password.php" class="space-y-4">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+      <div>
+        <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+        <input type="email" id="email" name="email" required autofocus
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+      </div>
+      <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors">
+        Send reset link
+      </button>
+    </form>
+  </div>
+  <p class="text-center text-sm text-gray-500 mt-6"><a href="/login.php" class="text-indigo-600 hover:text-indigo-700">← Back to login</a></p>
 </div>
-
-<p class="mt-8"><a href="/login.php">← Back to login</a></p>
+</div>
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Forgot password';
-$hideNav   = true;
 include __DIR__ . '/../templates/layout.php';

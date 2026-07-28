@@ -646,3 +646,94 @@ Phase 11 (password reset)
      - [ ] Manually: user with no pending tokens → no section rendered
      - [ ] Run `php tests/phpunit.phar --configuration tests/phpunit.xml` → all tests pass
      - [ ] `git commit -m "feat(us-18): pending standups section on dashboard landing page"`
+
+---
+
+## Phase 19: UI Redesign with Tailwind CSS (US-19)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+*Implement in 5 sub-phases. Each sub-phase should be visually verified before proceeding.*
+
+### Sub-phase A — Tailwind CDN + Base Layout
+102. Add Tailwind CDN to layout.php ⚠️ **Path B**
+     - [ ] Add `<script src="https://cdn.tailwindcss.com"></script>` to `<head>` in `templates/layout.php` (or header partial)
+     - [ ] Set `<body class="bg-gray-50 min-h-screen">` on all pages
+     - [ ] Wrap page content in `<div class="max-w-5xl mx-auto px-4 py-6">`
+
+103. Restyle nav bar in `templates/layout.php` ⚠️ **Path B**
+     - [ ] Replace existing nav HTML with Tailwind nav bar per US-19 STORY.md (sticky, shadow-sm, logo left / links centre-right / user+logout far right)
+     - [ ] Mobile collapse: `<details>/<summary>` for zero-JS hamburger; centre links hidden on `< sm` via `hidden sm:flex`
+
+104. Restyle `templates/team-nav.php` ⚠️ **Path B**
+     - [ ] Replace `.team-nav-links` list with tab-style underline nav per US-19 STORY.md
+     - [ ] Breadcrumb restyled with `text-xs text-gray-500` + hover
+     - [ ] Active tab: `border-indigo-600 text-indigo-600`; inactive: `border-transparent text-gray-500`
+
+105. Reduce `public/assets/style.css` to overrides only ⚠️ **Path B**
+     - [ ] Remove all layout/component CSS that is now covered by Tailwind
+     - [ ] Retain: `.pending-standups` amber left-border; `@media print` rules
+
+### Sub-phase B — Auth Pages
+106. Restyle `public/login.php` and `public/register.php` ⚠️ **Path B**
+     - [ ] Centred card layout (`max-w-md mx-auto`, white card, `shadow-sm`, `rounded-lg`, `p-8`)
+     - [ ] Logo + subtitle above card
+     - [ ] All inputs: `w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500`
+     - [ ] Labels: `block text-sm font-medium text-gray-700 mb-1`
+     - [ ] Submit button: primary indigo style
+     - [ ] CAPTCHA block: card section within form
+     - [ ] Flash / error messages: coloured banners per design system
+
+107. Restyle `public/profile.php`, `public/forgot-password.php`, `public/reset-password.php` ⚠️ **Path B**
+     - [ ] Card layout; consistent input/label/button classes
+     - [ ] Delete account section: danger button; amber warning block
+
+### Sub-phase C — Org + Team Management Pages
+108. Restyle org pages (`orgs/index.php`, `create.php`, `edit.php`, `delete.php`) ⚠️ **Path B**
+     - [ ] List: white card per org; action links (edit = secondary, delete = danger small)
+     - [ ] Create/edit: form card layout
+     - [ ] Delete: confirmation card with danger button
+
+109. Restyle team pages (`teams/index.php`, `create.php`, `edit.php`, `delete.php`, `members.php`, `questions.php`, `recipients.php`) ⚠️ **Path B**
+     - [ ] `teams/index.php`: per-team card with action link row
+     - [ ] `members.php`: table with role badge columns (is_owner/is_developer/is_recipient as small coloured dots or badges)
+     - [ ] `questions.php`: ordered list with edit/delete/reorder controls inline
+     - [ ] `recipients.php`: table with remove link
+     - [ ] Form pages: consistent card/input/button styles
+
+### Sub-phase D — Dashboard, Submission, Responses
+110. Restyle `public/dashboard.php` ⚠️ **Path B**
+     - [ ] Pending standups section: amber card with `bg-amber-50 border-l-4 border-amber-500`
+     - [ ] Team list: `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4` card grid per US-19 STORY.md
+
+111. Restyle `public/teams/dashboard.php` ⚠️ **Path B**
+     - [ ] Participation grid: table with `text-center` cells; ✓ = `text-green-600 font-bold`; ✗ = `text-red-500`; N/A = `text-gray-400`
+     - [ ] Stats row: `text-sm font-medium text-gray-700`
+
+112. Restyle `public/submit.php` ⚠️ **Path B**
+     - [ ] Org/team context heading: `text-xs text-gray-500` org name + `text-xl font-semibold` team standup title
+     - [ ] Each question in its own card or `<div class="mb-4">`
+     - [ ] Textarea: consistent input styling; auto-grow not required
+     - [ ] Confirmation page: success card with green border
+
+113. Restyle `public/teams/responses.php` ⚠️ **Path B**
+     - [ ] Filter form: inline flex row with input + select + buttons
+     - [ ] Day sections: card per day; member answers in `<dl>` with `dt`=`text-xs text-gray-500` / `dd`=`text-sm text-gray-900`
+     - [ ] No-response member: `text-gray-400 italic`
+
+### Sub-phase E — Invitation + Admin Pages
+114. Restyle `public/invitations/send.php` and `accept.php` ⚠️ **Path B**
+     - [ ] Send: form card; role checkboxes in a grid
+     - [ ] Accept: centred card with success/error state
+
+115. Restyle `public/admin/users.php` ⚠️ **Path B**
+     - [ ] Table with `divide-y divide-gray-100`
+     - [ ] Add `statusBadge(string $status): string` function (defined locally in this file)
+     - [ ] `pending` = `bg-amber-100 text-amber-800`; `approved` = `bg-green-100 text-green-800`; `rejected` = `bg-red-100 text-red-800`
+     - [ ] Action buttons: approve = primary small, reject = danger small, toggle admin = secondary small
+     - [ ] Admin badge next to user name when `is_admin = 1`
+
+116. Final visual check and commit
+     - [ ] Check all pages at 375px (Chrome DevTools iPhone SE) — no horizontal scroll; tap targets large enough
+     - [ ] Check all pages at 1280px — layout correct; no broken spacing
+     - [ ] Verify all PHP logic unchanged (form submissions, redirects, flash messages all still work)
+     - [ ] `git commit -m "feat(us-19): UI redesign with Tailwind CSS"`
