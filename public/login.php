@@ -23,10 +23,14 @@ $errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     validateCsrfToken($_POST['csrf_token'] ?? '');
 
-    if (!captchaValidate($_POST['captcha_answer'] ?? '')) {
+    $email = trim($_POST['email'] ?? '');
+
+    // Fix 3: check lockout BEFORE CAPTCHA and credentials.
+    if (isLoginLocked($pdo, $email)) {
+        $errors[] = 'Too many failed attempts. Please try again in 5 minutes.';
+    } elseif (!captchaValidate($_POST['captcha_answer'] ?? '')) {
         $errors[] = 'Incorrect answer to the security question.';
     } else {
-        $email    = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
         $result   = loginUser($pdo, $email, $password);
 

@@ -171,3 +171,22 @@ ALTER TABLE team_recipients ADD COLUMN unsubscribe_token VARCHAR(64) NULL UNIQUE
 
 -- US-21: send summary to all developers flag
 ALTER TABLE teams ADD COLUMN summary_to_all_developers TINYINT(1) NOT NULL DEFAULT 0;
+
+-- US-24 Fix 3: login attempt tracking for rate limiting
+CREATE TABLE IF NOT EXISTS login_attempts (
+    email            VARCHAR(255) NOT NULL PRIMARY KEY,
+    attempt_count    INT          NOT NULL DEFAULT 0,
+    first_attempt_at DATETIME     NOT NULL,
+    locked_until     DATETIME     NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE login_attempts MODIFY email VARCHAR(255) NOT NULL;  -- idempotent self-ref to mark migration point
+
+-- US-24 Fix 2C: separate request log for rate limiting (never deleted)
+-- Allows Fix 2B (DELETE unused tokens) and Fix 2C (rate limit) to work independently.
+CREATE TABLE IF NOT EXISTS password_reset_requests (
+    id           INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id      INT UNSIGNED NOT NULL,
+    requested_at DATETIME NOT NULL,
+    INDEX idx_prrq_user_time (user_id, requested_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

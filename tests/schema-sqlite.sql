@@ -149,3 +149,16 @@ CREATE TABLE IF NOT EXISTS password_resets (
     used_at    TEXT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+CREATE TABLE IF NOT EXISTS login_attempts (
+    email            TEXT    NOT NULL PRIMARY KEY,
+    attempt_count    INTEGER NOT NULL DEFAULT 0,
+    first_attempt_at TEXT    NOT NULL,
+    locked_until     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS password_reset_requests (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    requested_at TEXT NOT NULL
+);

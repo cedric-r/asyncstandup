@@ -462,3 +462,37 @@ The initial implementation used `$hideNav = true` on auth/token pages (login, re
 2. **Pre-existing fix commits appear in branch diff — document as branch-ancestry artefacts** — PA-12 (`register.php` invite fix, commit `76bc3bf`) was avoidable. Solution: when writing the IMPL-PLAN, scan `git log main..HEAD` for any hot-fix commits and list them in the IMPL-PLAN as branch-ancestry artefacts. The Code Reviewer will then see them as pre-documented, not as unplanned scope.
 
 3. **Assert `teams.created_by=NULL` explicitly in cascade tests** — the cascade test asserts organisations but misses the teams step. For future cascade tests, assert every nullify step explicitly, not just the ones that are most memorable. A failing DB constraint will surface missing steps, but an explicit assertion is better.
+
+---
+
+# RETRO addendum — US-24: Security Hardening
+
+**Branch**: `feature/asyncstandup-security` → `main`
+**Review cycles**: 2 | **Plan amendments**: 0
+
+## What went well
+
+- All 4 security fixes implemented correctly on first attempt (except the 2B+2C interaction).
+- Fix 1 (invitation accept GET→POST) was a clean implementation on first try.
+- Fix 3 (login rate limiting) DELETE+INSERT cross-DB pattern worked in tests immediately.
+- Fix 4 (`requireAdmin()` DB re-query) was simple and correct.
+- Security Scanner verdict was actionable and the recommended fix was exactly right.
+
+## What caused review cycles
+
+### Cycle 1 MAJOR: Fix 2B and Fix 2C mutually cancelled each other
+
+**What happened**: Fix 2B `DELETE FROM password_resets WHERE user_id=? AND used_at IS NULL` ran before Fix 2C's `COUNT(*)` query. Since 2B deletes all unused tokens before the new INSERT, the COUNT seen by 2C always returned 0 (post-DELETE) or 1 (after INSERT) — it never accumulated to 3. Both fixes individually correct; together they cancelled out.
+
+**Fix**: Separate `password_reset_requests` append-only log table. Fix 2C counts from this table (never deleted). Fix 2B operates on `password_resets` (unchanged). The two fixes are now fully independent.
+
+**Lesson 1**: **When rate-limiting and token invalidation both operate on the same table with DELETE semantics, the DELETE destroys the counter.** Always use a separate append-only log table for rate limiting. The log records intent ("user requested a reset"); the token table records state ("this token is valid"). These are different concerns and should live in different tables.
+
+**Lesson 2**: **Append-only log tables are the correct pattern for rate limiting.** A log row can never be undone by a different operation in the same function. Deletable state tables (tokens, sessions) are wrong choices for rate-limit counters.
+
+## Lessons learned (US-24 summary)
+
+1. **Fix 2B and 2C were mutually cancelling** — DELETE semantics on a shared table destroy the counter; use a separate append-only log for rate limiting.
+2. **Append-only log table = correct rate-limit counter** — never use a deletable token table as the counter.
+3. **Invitation accept GET must be idempotent** — any state-changing endpoint exposed via a GET parameter requires POST+CSRF confirmation (OWASP A05:2021).
+4. **Security Scanner for security-heavy stories** — invoke alongside the Security Auditor gate for thorough coverage of interacting fixes.

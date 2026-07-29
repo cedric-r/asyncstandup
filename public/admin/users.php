@@ -11,9 +11,8 @@ require_once __DIR__ . '/../../src/Mailer.php';
 require_once __DIR__ . '/../../src/View.php'; // renderEmailTemplate()
 
 startSession();
-requireAdmin();
-
-$pdo     = getDb($config);
+$pdo = getDb($config);
+requireAdmin($pdo);
 $errors  = [];
 $flash   = null;
 

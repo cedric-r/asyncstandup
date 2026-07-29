@@ -913,3 +913,68 @@ Phase 11 (password reset)
      - [ ] Test: non-admin POST to delete action → 403
      - [ ] Run `php tests/phpunit.phar --configuration tests/phpunit.xml` → all tests pass (US-16 self-delete still works)
      - [ ] `git commit -m "feat(us-23): admin delete user with cascadeDeleteUser refactor"`
+
+---
+
+## Phase 24: Security Hardening (US-24)
+**Agent:** PHP Developer (ID: `fa2e6dbf-d174-4a61-b2cc-710cc0a94a6e`)
+
+*Implement fixes in order: Fix 1 (lowest risk) → Fix 2 → Fix 3 → Fix 4 (requires signature change).*
+
+### Fix 1 — Invitation Accept Confirmation (VULN-001)
+147. Convert `public/invitations/accept.php` GET to confirmation-only ⚠️ **Path B**
+     - [ ] GET handler: load + validate invitation (existence, expiry, not-yet-accepted); detect `$emailMismatch`; render confirmation form with CSRF token, hidden token field, Accept + Decline buttons; do NOT call `acceptInvitationForUser()` on GET
+     - [ ] POST handler: validate CSRF; re-load token (re-validate); call `acceptInvitationForUser()`; redirect to dashboard with flash
+     - [ ] Email mismatch warning: shown when `$currentUser['email'] !== $invitation['invited_email']` (case-insensitive compare)
+     - [ ] Decline = link to `/dashboard.php` (no DB action)
+
+### Fix 2 — Password Reset Hardening (VULN-002)
+148. Add CAPTCHA to `public/forgot-password.php` ⚠️ **Path B**
+     - [ ] GET: `require_once 'src/Captcha.php'`; call `captchaGetRandomQuestion()`; render CAPTCHA field
+     - [ ] POST: validate CAPTCHA before any DB lookup; on fail: error + new question; do not proceed
+
+149. Refactor `createPasswordResetToken()` in `src/Auth.php` ⚠️ **Path B**
+     - [ ] Rate limit check: `COUNT(*) FROM password_resets WHERE user_id = ? AND created_at > ?` (15-min window); if ≥ 3 return `''`
+     - [ ] Transaction: `DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL`; then INSERT new token
+     - [ ] Return new token on success; `''` on rate-limit
+     - [ ] Update caller in `forgot-password.php`: treat `''` return as rate-limited (still show generic flash)
+
+### Fix 3 — Login Rate Limiting (VULN-003)
+150. Update schema files ⚠️ **Path B — additive**
+     - [ ] `db/schema.sql`: CREATE TABLE `login_attempts (email VARCHAR(255) PK, attempt_count INT, first_attempt_at DATETIME, locked_until DATETIME NULL)` ENGINE=InnoDB
+     - [ ] `tests/schema-sqlite.sql`: equivalent with TEXT/INTEGER/TEXT columns
+
+151. Add rate limit helpers to `src/Auth.php` ⚠️ **Path B — additive**
+     - [ ] `isLoginLocked(PDO, string $email): bool` — check `locked_until > UTC_NOW()`
+     - [ ] `recordFailedLogin(PDO, string $email): void` — upsert with window reset + lock after 5 failures; MySQL: `ON DUPLICATE KEY UPDATE`; SQLite test workaround: `INSERT OR REPLACE`
+     - [ ] `clearLoginAttempts(PDO, string $email): void` — DELETE row on successful login
+
+152. Update `public/login.php` to check lockout ⚠️ **Path B**
+     - [ ] Before CAPTCHA/credential check: `if (isLoginLocked($pdo, $email)) { $errors[] = 'Too many...'; }` — skip credentials entirely when locked
+     - [ ] On password fail: `recordFailedLogin($pdo, $email)`
+     - [ ] On success: `clearLoginAttempts($pdo, $email)` before session start
+
+### Fix 4 — requireAdmin() DB Re-verification (M-1)
+153. Update `requireAdmin()` signature to `requireAdmin(PDO $pdo): void` ⚠️ **Path B**
+     - [ ] After `requireLogin()`: SELECT `is_admin, account_status` from DB by `$_SESSION['user_id']`
+     - [ ] If not found OR `is_admin = 0` OR `account_status != 'approved'`: `unset($_SESSION['is_admin'])`; `forbid()`
+     - [ ] Otherwise: `$_SESSION['is_admin'] = true` (keep in sync)
+
+154. Update all callers of `requireAdmin()` ⚠️ **Path B**
+     - [ ] `public/admin/users.php`: change `requireAdmin()` → `requireAdmin($pdo)` (PDO already available)
+     - [ ] Grep for any other `requireAdmin()` calls; update all
+
+### Tests & Final
+155. Add test cases to `tests/RepositoryTest.php` ⚠️ **Path B**
+     - [ ] Fix 2B: seed 2 unused reset tokens; call `createPasswordResetToken()`; assert old tokens deleted; count=1 remaining
+     - [ ] Fix 2C: seed 3 tokens within 15-min window; call again; assert returns `''`; no new row
+     - [ ] Fix 3: `recordFailedLogin()` × 5; assert `isLoginLocked()` returns `true`; `clearLoginAttempts()`; assert `isLoginLocked()` returns `false`
+
+156. Verify and commit
+     - [ ] Fix 1: visit accept link as logged-in user → confirmation form shown; POST → joined; email mismatch warning visible when emails differ
+     - [ ] Fix 2: forgot-password without CAPTCHA → blocked; with correct CAPTCHA → proceeds
+     - [ ] Fix 2: request reset 3 times in 15 min → no new email on 3rd
+     - [ ] Fix 3: fail login 5 times → "Too many attempts" on 6th (credentials not checked)
+     - [ ] Fix 4: remove `is_admin` from a user in DB while they are still logged in → next admin page visit → 403
+     - [ ] Run `php tests/phpunit.phar --configuration tests/phpunit.xml` → all tests pass
+     - [ ] `git commit -m "fix(us-24): security hardening - invite confirm, reset rate limit, login lockout, admin db verify"`

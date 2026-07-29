@@ -85,6 +85,7 @@ function loginUser(PDO $pdo, string $email, string $password): string
     $row = $stmt->fetch();
 
     if ($row === false || !password_verify($password, $row['password_hash'])) {
+        recordFailedLogin($pdo, $email); // Fix 3: track failed attempts.
         return 'invalid'; // Generic — never reveal whether email exists.
     }
 
@@ -98,7 +99,8 @@ function loginUser(PDO $pdo, string $email, string $password): string
         return 'rejected';
     }
 
-    // Approved — start session.
+    // Approved — clear any lockout record and start session.
+    clearLoginAttempts($pdo, $email); // Fix 3: reset on success.
     $_SESSION['user_id']  = (int) $row['id'];
     $_SESSION['is_admin'] = (bool) $row['is_admin'];
     // Guard for CLI/test context where no session is active.
@@ -206,14 +208,53 @@ function changePassword(PDO $pdo, int $userId, string $current, string $new): bo
  *
  * @return string 64-char hex token.
  */
+/**
+ * Generate a password reset token for a user.
+ *
+ * Fix 2B: deletes all prior unused tokens before inserting the new one
+ *   (prevents stale token accumulation; each request invalidates prior tokens).
+ * Fix 2C: rate-limits using a SEPARATE log table `password_reset_requests`.
+ *   This allows 2B and 2C to work independently:
+ *   - 2B deletes from `password_resets` (so COUNT there would always be 0/1)
+ *   - 2C counts from `password_reset_requests` (append-only log; never deleted)
+ *   If ≥3 requests in 15 minutes, returns '' — caller shows generic flash; no enumeration.
+ *
+ * @return string 64-char hex token, or '' if rate limit exceeded.
+ */
 function createPasswordResetToken(PDO $pdo, int $userId, ?DateTimeImmutable $now = null): string
 {
-    $token     = bin2hex(random_bytes(32));
     $now     ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    $window    = $now->modify('-15 minutes')->format('Y-m-d H:i:s');
+    $nowFmt    = $now->format('Y-m-d H:i:s');
     $expiresAt = $now->modify('+1 hour')->format('Y-m-d H:i:s');
 
-    $pdo->prepare('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)')
-        ->execute([$userId, $token, $expiresAt]);
+    // Fix 2C: rate-limit check using append-only request log (independent of Fix 2B).
+    $rateStmt = $pdo->prepare(
+        'SELECT COUNT(*) FROM password_reset_requests WHERE user_id = ? AND requested_at > ?'
+    );
+    $rateStmt->execute([$userId, $window]);
+    if ((int) $rateStmt->fetchColumn() >= 3) {
+        return ''; // Rate limit exceeded — no new token; caller shows generic flash.
+    }
+
+    // Log this request (used only for rate limiting; never deleted).
+    $pdo->prepare('INSERT INTO password_reset_requests (user_id, requested_at) VALUES (?, ?)')
+        ->execute([$userId, $nowFmt]);
+
+    $token = bin2hex(random_bytes(32));
+
+    // Fix 2B: invalidate prior unused tokens + insert new one atomically.
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare('DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL')
+            ->execute([$userId]);
+        $pdo->prepare('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)')
+            ->execute([$userId, $token, $expiresAt]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
 
     return $token;
 }
@@ -278,16 +319,95 @@ function applyPasswordReset(PDO $pdo, int $tokenId, int $userId, string $newPass
 /**
  * Require the current user to be an administrator.
  *
- * Calls requireLogin() first (redirects unauthenticated users to login).
- * Then checks $_SESSION['is_admin'] — calls forbid() (HTTP 403) if not admin.
+ * Fix 4: re-queries the DB on every call to detect de-admin'd sessions.
+ * Updates $_SESSION['is_admin'] and calls forbid() if not admin or not approved.
+ *
+ * @param PDO $pdo Active database connection for live re-verification.
  */
-function requireAdmin(): void
+function requireAdmin(PDO $pdo): void
 {
     requireLogin();
 
-    if (empty($_SESSION['is_admin'])) {
+    $stmt = $pdo->prepare(
+        'SELECT is_admin, account_status FROM users WHERE id = ?'
+    );
+    $stmt->execute([(int) $_SESSION['user_id']]);
+    $row = $stmt->fetch();
+
+    if (!$row || !(bool) $row['is_admin'] || $row['account_status'] !== 'approved') {
+        unset($_SESSION['is_admin']); // Revoke stale session flag.
         forbid();
     }
+
+    $_SESSION['is_admin'] = true; // Keep session flag in sync.
+}
+
+// ---------------------------------------------------------------------------
+// Fix 3 — Login rate limiting helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Return true if the given email is currently locked out due to too many failures.
+ */
+function isLoginLocked(PDO $pdo, string $email): bool
+{
+    $stmt = $pdo->prepare('SELECT locked_until FROM login_attempts WHERE email = ?');
+    $stmt->execute([strtolower(trim($email))]);
+    $row = $stmt->fetch();
+
+    if ($row === false || empty($row['locked_until'])) {
+        return false;
+    }
+
+    $lockedUntil = new DateTimeImmutable($row['locked_until'], new DateTimeZone('UTC'));
+    $now         = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+
+    return $lockedUntil > $now;
+}
+
+/**
+ * Record a failed login attempt. Locks the account after 5 failures in 10 minutes.
+ *
+ * Uses DELETE+INSERT for the fresh-window case (cross-DB compatible;
+ * MySQL's ON DUPLICATE KEY UPDATE would not work in SQLite tests).
+ */
+function recordFailedLogin(PDO $pdo, string $email): void
+{
+    $email   = strtolower(trim($email));
+    $now     = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    $window  = $now->modify('-10 minutes')->format('Y-m-d H:i:s');
+    $nowStr  = $now->format('Y-m-d H:i:s');
+    $lockStr = $now->modify('+5 minutes')->format('Y-m-d H:i:s');
+
+    $stmt = $pdo->prepare(
+        'SELECT attempt_count, first_attempt_at FROM login_attempts WHERE email = ?'
+    );
+    $stmt->execute([$email]);
+    $row = $stmt->fetch();
+
+    if ($row === false || $row['first_attempt_at'] < $window) {
+        // Fresh window — reset counter.
+        $pdo->prepare('DELETE FROM login_attempts WHERE email = ?')->execute([$email]);
+        $pdo->prepare(
+            'INSERT INTO login_attempts (email, attempt_count, first_attempt_at, locked_until)
+             VALUES (?, 1, ?, NULL)'
+        )->execute([$email, $nowStr]);
+    } else {
+        $newCount = (int) $row['attempt_count'] + 1;
+        $lock     = $newCount >= 5 ? $lockStr : null;
+        $pdo->prepare(
+            'UPDATE login_attempts SET attempt_count = ?, locked_until = ? WHERE email = ?'
+        )->execute([$newCount, $lock, $email]);
+    }
+}
+
+/**
+ * Clear login attempt history on successful login.
+ */
+function clearLoginAttempts(PDO $pdo, string $email): void
+{
+    $pdo->prepare('DELETE FROM login_attempts WHERE email = ?')
+        ->execute([strtolower(trim($email))]);
 }
 
 /**

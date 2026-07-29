@@ -9,6 +9,7 @@ require_once __DIR__ . '/../src/Auth.php';
 require_once __DIR__ . '/../src/Csrf.php';
 require_once __DIR__ . '/../src/Mailer.php';
 require_once __DIR__ . '/../src/View.php';
+require_once __DIR__ . '/../src/Captcha.php'; // Fix 2A: CAPTCHA on forgot-password
 
 startSession();
 
@@ -16,6 +17,13 @@ $pdo = getDb($config);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     validateCsrfToken($_POST['csrf_token'] ?? '');
+
+    // Fix 2A: CAPTCHA validation before any token creation or email send.
+    if (!captchaValidate($_POST['captcha_answer'] ?? '')) {
+        setFlash('success', 'If your email is registered, you will receive a reset link.');
+        header('Location: /forgot-password.php');
+        exit;
+    }
 
     $email = mb_strtolower(trim($_POST['email'] ?? ''));
 
@@ -26,6 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($user !== false) {
             $token    = createPasswordResetToken($pdo, (int) $user['id']);
+            // Fix 2C: empty token means rate limit exceeded; skip email silently.
+            if ($token !== '') {
             $resetUrl = rtrim($config['app_url'], '/') . '/reset-password.php?token=' . urlencode($token);
             $userName = $user['display_name'] ?: $email;
             $body     = renderEmailTemplate(
@@ -37,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (RuntimeException $e) {
                 error_log('[AsyncStandUp] forgot-password sendMail failed: ' . $e->getMessage());
             }
+            } // end if ($token !== '')
         }
     }
 
@@ -47,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $csrfToken = generateCsrfToken();
 $flash     = getFlash();
+$captcha   = captchaGetRandomQuestion();
 
 ob_start();
 ?>
@@ -60,6 +72,11 @@ ob_start();
       <div>
         <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email address</label>
         <input type="email" id="email" name="email" required autofocus
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1"><?= htmlspecialchars($captcha['question'], ENT_QUOTES, 'UTF-8') ?></label>
+        <input type="text" name="captcha_answer" autocomplete="off" required
                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
       </div>
       <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors">

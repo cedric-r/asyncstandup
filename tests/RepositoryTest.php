@@ -876,4 +876,86 @@ class RepositoryTest extends TestCase
         $otherTm = (int) $this->pdo->query("SELECT COUNT(*) FROM team_members WHERE user_id = {$ownerId}")->fetchColumn();
         self::assertSame(1, $otherTm, 'Other team member must not be affected by target deletion');
     }
+
+    // =========================================================================
+    // US-24 Security Hardening tests
+    // =========================================================================
+
+    public function testCreatePasswordResetToken_DeletesPriorUnusedTokens(): void
+    {
+        // Fix 2B: prior unused tokens deleted before new one is inserted.
+        // Fix 2C uses password_reset_requests (separate table) so the COUNT is independent.
+        $userId = seedUser($this->pdo, 'pr-del@test.com', 'PR Del');
+        $future = gmdate('Y-m-d H:i:s', time() + 3600);
+
+        // Seed 2 old unused tokens directly in password_resets.
+        $this->pdo->prepare('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)')
+            ->execute([$userId, 'old-tok-1', $future]);
+        $this->pdo->prepare('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)')
+            ->execute([$userId, 'old-tok-2', $future]);
+
+        $newToken = createPasswordResetToken($this->pdo, $userId);
+
+        self::assertNotEmpty($newToken, 'New token must be returned');
+        self::assertSame(64, strlen($newToken), 'Token must be 64 hex chars');
+
+        // Only 1 row in password_resets (old ones deleted by Fix 2B).
+        $count = (int) $this->pdo->query("SELECT COUNT(*) FROM password_resets WHERE user_id = {$userId}")->fetchColumn();
+        self::assertSame(1, $count, 'Prior unused tokens must be deleted; only new token remains');
+
+        // Rate-limit log has 1 entry.
+        $logCount = (int) $this->pdo->query("SELECT COUNT(*) FROM password_reset_requests WHERE user_id = {$userId}")->fetchColumn();
+        self::assertSame(1, $logCount, 'Request log must have 1 entry after one successful call');
+    }
+
+    public function testCreatePasswordResetToken_RateLimitReturnsEmpty(): void
+    {
+        // Fix 2C: rate limit uses password_reset_requests (independent of password_resets).
+        $userId = seedUser($this->pdo, 'pr-rl@test.com', 'PR RL');
+        $now    = gmdate('Y-m-d H:i:s');
+
+        // Seed 3 request-log entries within the 15-min window.
+        for ($i = 0; $i < 3; $i++) {
+            $this->pdo->prepare(
+                'INSERT INTO password_reset_requests (user_id, requested_at) VALUES (?, ?)'
+            )->execute([$userId, $now]);
+        }
+
+        $result = createPasswordResetToken($this->pdo, $userId);
+
+        self::assertSame('', $result, 'Rate limit exceeded must return empty string');
+
+        // No token inserted in password_resets.
+        $count = (int) $this->pdo->query("SELECT COUNT(*) FROM password_resets WHERE user_id = {$userId}")->fetchColumn();
+        self::assertSame(0, $count, 'No token must be inserted when rate limited');
+    }
+
+    public function testRecordFailedLogin_LocksAfter5Attempts(): void
+    {
+        $email = 'lockout@test.com';
+
+        for ($i = 0; $i < 5; $i++) {
+            recordFailedLogin($this->pdo, $email);
+        }
+
+        self::assertTrue(isLoginLocked($this->pdo, $email),
+            'Account must be locked after 5 failed attempts');
+    }
+
+    public function testClearLoginAttempts_UnlocksUser(): void
+    {
+        $email = 'clearme@test.com';
+
+        // 5 failures to trigger lock.
+        for ($i = 0; $i < 5; $i++) {
+            recordFailedLogin($this->pdo, $email);
+        }
+
+        self::assertTrue(isLoginLocked($this->pdo, $email));
+
+        clearLoginAttempts($this->pdo, $email);
+
+        self::assertFalse(isLoginLocked($this->pdo, $email),
+            'Account must be unlocked after clearLoginAttempts()');
+    }
 }
