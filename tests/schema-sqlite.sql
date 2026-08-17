@@ -179,3 +179,19 @@ CREATE TABLE IF NOT EXISTS standup_mood_scores (
     FOREIGN KEY (submission_id) REFERENCES standup_submissions(id),
     FOREIGN KEY (question_id)   REFERENCES team_questions(id)
 );
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    key_hash     TEXT NOT NULL UNIQUE,
+    label        TEXT NULL,
+    created_at   TEXT NOT NULL DEFAULT '',
+    last_used_at TEXT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS api_request_log (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    key_hash     TEXT NOT NULL,
+    requested_at TEXT NOT NULL
+);

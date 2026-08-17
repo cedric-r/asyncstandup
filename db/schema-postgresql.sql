@@ -172,3 +172,21 @@ CREATE TABLE IF NOT EXISTS standup_mood_scores (
     scored_at     TIMESTAMP NOT NULL,
     CONSTRAINT uq_mood_submission_question UNIQUE (submission_id, question_id)
 );
+
+-- US-33: public REST API
+CREATE TABLE IF NOT EXISTS api_keys (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    key_hash     VARCHAR(64) NOT NULL UNIQUE,
+    label        VARCHAR(100) NULL,
+    created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+    last_used_at TIMESTAMP NULL
+);
+
+CREATE TABLE IF NOT EXISTS api_request_log (
+    id           SERIAL PRIMARY KEY,
+    key_hash     VARCHAR(64) NOT NULL,
+    requested_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_log_key_time ON api_request_log (key_hash, requested_at);
