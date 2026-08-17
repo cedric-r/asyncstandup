@@ -106,7 +106,8 @@ CREATE TABLE IF NOT EXISTS standup_tokens (
     send_date  TEXT NOT NULL,
     sent_at    TEXT NOT NULL,
     expires_at TEXT NOT NULL,
-    used_at    TEXT NULL,
+    used_at          TEXT NULL,
+    reminder_sent_at TEXT NULL,
     UNIQUE(team_id, user_id, send_date),
     FOREIGN KEY (team_id) REFERENCES teams(id),
     FOREIGN KEY (user_id) REFERENCES users(id)

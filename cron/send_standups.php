@@ -79,6 +79,17 @@ foreach ($teams as $team) {
     }
 }
 
+// ── Pass 3: Submission reminders ──────────────────────────────────────────────────────────────────
+$reminderTokens = getPendingUnremindedTokens($pdo, $nowUtc);
+foreach ($reminderTokens as $rt) {
+    try {
+        sendSubmissionReminder($pdo, $config, $rt, $nowUtc);
+        markReminderSent($pdo, (int) $rt['id'], $nowUtc);
+    } catch (RuntimeException $e) {
+        logCronError('[Reminder] Token ' . $rt['id'] . ': ' . $e->getMessage());
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

@@ -90,7 +90,8 @@ CREATE TABLE IF NOT EXISTS standup_tokens (
     send_date  DATE NOT NULL,
     sent_at    TIMESTAMP NOT NULL,
     expires_at TIMESTAMP NOT NULL,
-    used_at    TIMESTAMP NULL,
+    used_at          TIMESTAMP NULL,
+    reminder_sent_at TIMESTAMP NULL,
     CONSTRAINT uq_token_team_user_date UNIQUE (team_id, user_id, send_date)
 );
 
@@ -145,3 +146,6 @@ CREATE INDEX IF NOT EXISTS idx_prrq_user_time ON password_reset_requests (user_i
 
 -- US-26: team suspension (run on existing PostgreSQL installs)
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+
+-- US-29: submission reminder tracking
+ALTER TABLE standup_tokens ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMP NULL;
