@@ -20,6 +20,7 @@ require_once __DIR__ . '/../src/DashboardRepository.php';
 require_once __DIR__ . '/../src/InvitationRepository.php';
 require_once __DIR__ . '/../src/OrgRepository.php';
 require_once __DIR__ . '/../src/SubmissionRepository.php';
+require_once __DIR__ . '/../src/ApiAuth.php';
 
 /**
  * Create an isolated in-memory SQLite PDO with the AsyncStandUp schema applied.

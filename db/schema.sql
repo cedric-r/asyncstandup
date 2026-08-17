@@ -217,3 +217,21 @@ CREATE TABLE IF NOT EXISTS standup_mood_scores (
     FOREIGN KEY (submission_id) REFERENCES standup_submissions(id),
     FOREIGN KEY (question_id)   REFERENCES team_questions(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- US-33: public REST API
+CREATE TABLE IF NOT EXISTS api_keys (
+    id           INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id      INT UNSIGNED NOT NULL,
+    key_hash     VARCHAR(64) NOT NULL UNIQUE,
+    label        VARCHAR(100) NULL,
+    created_at   DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP()),
+    last_used_at DATETIME NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS api_request_log (
+    id           INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    key_hash     VARCHAR(64) NOT NULL,
+    requested_at DATETIME NOT NULL,
+    INDEX idx_api_log_key_time (key_hash, requested_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
