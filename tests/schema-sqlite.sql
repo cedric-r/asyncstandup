@@ -184,9 +184,10 @@ CREATE TABLE IF NOT EXISTS api_keys (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id      INTEGER NOT NULL,
     key_hash     TEXT NOT NULL UNIQUE,
-    label        TEXT NULL,
+    name         TEXT NOT NULL DEFAULT '',
     created_at   TEXT NOT NULL DEFAULT '',
     last_used_at TEXT NULL,
+    revoked_at   TEXT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 

@@ -31,6 +31,7 @@
         <a href="/profile.php" class="text-gray-600 hover:text-indigo-600">
           <?= htmlspecialchars($currentUser['display_name'] ?? $currentUser['email'], ENT_QUOTES, 'UTF-8') ?>
         </a>
+        <a href="/settings/api-keys.php" class="text-gray-600 hover:text-indigo-600">API Keys</a>
         <a href="/logout.php" class="text-gray-400 hover:text-gray-600">Log out</a>
       </div>
       <?php else: ?>

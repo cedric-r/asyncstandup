@@ -5,9 +5,9 @@ declare(strict_types=1);
 /**
  * Authenticate from Authorization: Bearer <key> header.
  *
- * @return array{id: int, user_id: int, key_hash: string, label: string|null,
- *               created_at: string, last_used_at: string|null}|null
- *         The api_keys row, or null if the key is missing or invalid.
+ * @return array{id: int, user_id: int, key_hash: string, name: string,
+ *               created_at: string, last_used_at: string|null, revoked_at: string|null}|null
+ *         The api_keys row, or null if the key is missing, invalid, or revoked.
  */
 function authenticateApiKey(PDO $pdo): ?array
 {
@@ -19,7 +19,7 @@ function authenticateApiKey(PDO $pdo): ?array
     $rawKey  = trim(substr($header, 7));
     $keyHash = hash('sha256', $rawKey);
 
-    $stmt = $pdo->prepare('SELECT * FROM api_keys WHERE key_hash = ?');
+    $stmt = $pdo->prepare('SELECT * FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL');
     $stmt->execute([$keyHash]);
     $row = $stmt->fetch();
 

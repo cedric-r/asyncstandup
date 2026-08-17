@@ -190,3 +190,7 @@ CREATE TABLE IF NOT EXISTS api_request_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_api_log_key_time ON api_request_log (key_hash, requested_at);
+
+-- US-35: API key management — rename label → name, add soft-delete column
+ALTER TABLE api_keys RENAME COLUMN label TO name;
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP NULL;

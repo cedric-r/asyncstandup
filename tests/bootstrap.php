@@ -21,6 +21,7 @@ require_once __DIR__ . '/../src/InvitationRepository.php';
 require_once __DIR__ . '/../src/OrgRepository.php';
 require_once __DIR__ . '/../src/SubmissionRepository.php';
 require_once __DIR__ . '/../src/ApiAuth.php';
+require_once __DIR__ . '/../src/ApiKeyRepository.php';
 require_once __DIR__ . '/../src/McpServer.php';
 require_once __DIR__ . '/../src/McpTools.php';
 

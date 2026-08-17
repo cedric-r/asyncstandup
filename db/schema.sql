@@ -235,3 +235,7 @@ CREATE TABLE IF NOT EXISTS api_request_log (
     requested_at DATETIME NOT NULL,
     INDEX idx_api_log_key_time (key_hash, requested_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- US-35: API key management — rename label → name, add soft-delete column
+ALTER TABLE api_keys CHANGE COLUMN label name VARCHAR(100) NOT NULL DEFAULT '';
+ALTER TABLE api_keys ADD COLUMN revoked_at DATETIME NULL;
