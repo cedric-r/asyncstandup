@@ -27,6 +27,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     elseif ($action === 'edit') { $q = trim($_POST['question'] ?? ''); if ($q !== '' && $questionId > 0) updateQuestion($pdo, $questionId, $teamId, $q); setFlash('success', 'Updated.'); }
     elseif ($action === 'delete' && $questionId > 0) { deleteQuestion($pdo, $questionId, $teamId); setFlash('success', 'Deleted.'); }
     elseif (in_array($action, ['up','down'], true) && $questionId > 0) { swapQuestionPositions($pdo, $questionId, $action, $teamId); }
+    elseif ($action === 'set_blocker' && $questionId > 0) { setBlockerQuestion($pdo, $teamId, $questionId); setFlash('success', 'Blocker question set.'); }
+    elseif ($action === 'clear_blocker')                  { clearBlockerQuestion($pdo, $teamId);             setFlash('success', 'Blocker question cleared.'); }
+    elseif ($action === 'set_mood' && $questionId > 0)    { setMoodQuestion($pdo, $teamId, $questionId);     setFlash('success', 'Mood question set.'); }
+    elseif ($action === 'clear_mood')                     { clearMoodQuestion($pdo, $teamId);                setFlash('success', 'Mood question cleared.'); }
     header('Location: /teams/questions.php?team_id=' . $teamId);
     exit;
 }
@@ -79,6 +83,34 @@ ob_start();
     <input type="hidden" name="question_id" value="<?= (int) $q['id'] ?>">
     <button type="submit" onclick="return confirm('Delete?')" class="text-red-500 hover:text-red-700 text-xs">Delete</button>
   </form>
+  <?php /* Blocker toggle */ if ((int) ($q['is_blocker'] ?? 0) === 1): ?>
+  <form method="POST" action="/teams/questions.php?team_id=<?= (int) $teamId ?>" class="inline">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+    <input type="hidden" name="action" value="clear_blocker">
+    <button type="submit" class="text-xs text-red-600 hover:text-red-800">⚠️ Blocker</button>
+  </form>
+  <?php else: ?>
+  <form method="POST" action="/teams/questions.php?team_id=<?= (int) $teamId ?>" class="inline">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+    <input type="hidden" name="action" value="set_blocker">
+    <input type="hidden" name="question_id" value="<?= (int) $q['id'] ?>">
+    <button type="submit" class="text-xs text-gray-400 hover:text-red-600">Set blocker</button>
+  </form>
+  <?php endif; ?>
+  <?php /* Mood toggle */ if ((int) ($q['is_mood'] ?? 0) === 1): ?>
+  <form method="POST" action="/teams/questions.php?team_id=<?= (int) $teamId ?>" class="inline">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+    <input type="hidden" name="action" value="clear_mood">
+    <button type="submit" class="text-xs text-indigo-600 hover:text-indigo-800">😊 Mood ✓</button>
+  </form>
+  <?php else: ?>
+  <form method="POST" action="/teams/questions.php?team_id=<?= (int) $teamId ?>" class="inline">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+    <input type="hidden" name="action" value="set_mood">
+    <input type="hidden" name="question_id" value="<?= (int) $q['id'] ?>">
+    <button type="submit" class="text-xs text-gray-400 hover:text-indigo-600">Set mood</button>
+  </form>
+  <?php endif; ?>
 </div>
 <?php endforeach; ?>
 </div>

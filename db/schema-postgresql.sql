@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS team_questions (
     team_id    INTEGER NOT NULL REFERENCES teams(id),
     question   TEXT NOT NULL,
     position   INTEGER NOT NULL,
+    is_blocker BOOLEAN NOT NULL DEFAULT FALSE,
+    is_mood    BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -155,3 +157,18 @@ ALTER TABLE standup_tokens ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMP N
 -- US-30: configurable frequency
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS frequency     VARCHAR(10) NOT NULL DEFAULT 'daily';
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS frequency_day SMALLINT NULL;
+
+-- US-31: blocker question flagging
+ALTER TABLE team_questions ADD COLUMN IF NOT EXISTS is_blocker BOOLEAN NOT NULL DEFAULT FALSE;
+-- US-32: mood question flagging
+ALTER TABLE team_questions ADD COLUMN IF NOT EXISTS is_mood    BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- US-32: mood scores
+CREATE TABLE IF NOT EXISTS standup_mood_scores (
+    id            SERIAL PRIMARY KEY,
+    submission_id INTEGER NOT NULL REFERENCES standup_submissions(id),
+    question_id   INTEGER NOT NULL REFERENCES team_questions(id),
+    score         SMALLINT NOT NULL,
+    scored_at     TIMESTAMP NOT NULL,
+    CONSTRAINT uq_mood_submission_question UNIQUE (submission_id, question_id)
+);

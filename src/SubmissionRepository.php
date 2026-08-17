@@ -72,13 +72,42 @@ function saveSubmission(PDO $pdo, int $tokenId, int $userId, int $teamId, array 
         }
 
         // Mark token as used. PHP-computed timestamp for MySQL+SQLite compatibility.
-        $usedAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+        $nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
         $pdo->prepare('UPDATE standup_tokens SET used_at = ? WHERE id = ?')
-            ->execute([$usedAt, $tokenId]);
+            ->execute([$nowUtc->format('Y-m-d H:i:s'), $tokenId]);
+
+        // Record mood score if a mood question is configured for this team.
+        $moodQStmt = $pdo->prepare('SELECT id FROM team_questions WHERE team_id = ? AND is_mood = 1 LIMIT 1');
+        $moodQStmt->execute([$teamId]);
+        $moodQ = $moodQStmt->fetch();
+        if ($moodQ !== false && isset($answers[(int) $moodQ['id']])) {
+            recordMoodScore($pdo, $submissionId, (int) $moodQ['id'], (string) $answers[(int) $moodQ['id']], $nowUtc);
+        }
 
         $pdo->commit();
     } catch (Throwable $e) {
         $pdo->rollBack();
         throw $e;
+    }
+}
+
+/**
+ * Record a mood score for a submission answer.
+ * Silently ignores duplicate-key violations (idempotent).
+ */
+function recordMoodScore(PDO $pdo, int $submissionId, int $questionId, string $answer, DateTimeImmutable $nowUtc): void
+{
+    $score = scoreMoodAnswer($answer);
+    if ($score === null) {
+        return;
+    }
+
+    try {
+        $pdo->prepare('
+            INSERT INTO standup_mood_scores (submission_id, question_id, score, scored_at)
+            VALUES (?, ?, ?, ?)
+        ')->execute([$submissionId, $questionId, $score, $nowUtc->format('Y-m-d H:i:s')]);
+    } catch (PDOException) {
+        // Duplicate key — score already recorded; ignore.
     }
 }

@@ -75,7 +75,7 @@ function assembleSummaryData(PDO $pdo, int $teamId, string $sendDate): array
     $developers = $devStmt->fetchAll();
 
     // Questions in order.
-    $qStmt = $pdo->prepare('SELECT id, question FROM team_questions WHERE team_id = ? ORDER BY position');
+    $qStmt = $pdo->prepare('SELECT id, question, is_blocker FROM team_questions WHERE team_id = ? ORDER BY position');
     $qStmt->execute([$teamId]);
     $questions = $qStmt->fetchAll();
 

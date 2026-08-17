@@ -223,3 +223,30 @@ function sendSubmissionReminder(PDO $pdo, array $config, array $token, DateTimeI
 
     sendMail($config, $to, $toName, $subject, $body);
 }
+
+/**
+ * Score a free-text mood answer on a 1–5 scale.
+ * Returns null if the answer contains no recognisable sentiment keyword.
+ *
+ * @return int<1,5>|null
+ */
+function scoreMoodAnswer(string $answer): ?int
+{
+    $lower = mb_strtolower(trim($answer));
+    if ($lower === '') {
+        return null;
+    }
+
+    // Score 5 — very positive
+    if (preg_match('/😀|🔥|great|awesome|excellent|fantastic|amazing/u', $lower)) { return 5; }
+    // Score 4 — positive
+    if (preg_match('/👍|good|well|solid|productive|happy/u', $lower))             { return 4; }
+    // Score 3 — neutral
+    if (preg_match('/ok|okay|fine|alright|average|normal|decent/u', $lower))     { return 3; }
+    // Score 2 — negative
+    if (preg_match('/tired|meh|slow|rough|struggling|stressed/u', $lower))       { return 2; }
+    // Score 1 — very negative
+    if (preg_match('/😞|😢|bad|blocked|terrible|awful|sick|burned/u', $lower))   { return 1; }
+
+    return null; // unrecognised — do not store
+}

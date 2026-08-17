@@ -107,6 +107,41 @@ ob_start();
 </div>
 <?php endif; ?>
 <?php
+// Mood trend section
+require_once __DIR__ . '/../../src/StandupEmailer.php'; // scoreMoodAnswer (already loads TeamRepository transitively via bootstrap; include is safe)
+$questions        = getQuestions($pdo, $teamId);
+$hasMoodQuestion  = !empty(array_filter($questions, fn($q) => (int) ($q['is_mood'] ?? 0) === 1));
+if ($hasMoodQuestion):
+    $dateFrom30 = date('Y-m-d', strtotime('-30 days'));
+    $dateTo     = date('Y-m-d');
+    $moodTrend  = getMoodTrend($pdo, $teamId, $dateFrom30, $dateTo);
+?>
+<div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+  <h2 class="text-lg font-semibold text-gray-800 mb-4">Mood Trend — last 30 days</h2>
+  <?php if (empty($moodTrend)): ?>
+    <p class="text-sm text-gray-500">No mood data yet. Set a mood question to start tracking.</p>
+  <?php else: ?>
+  <table class="w-full text-sm text-left">
+    <thead><tr class="border-b">
+      <th class="py-2 pr-4 font-medium text-gray-600">Date</th>
+      <th class="py-2 pr-4 font-medium text-gray-600">Avg</th>
+      <th class="py-2 font-medium text-gray-600">Responses</th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($moodTrend as $row): ?>
+      <tr class="border-b border-gray-50">
+        <td class="py-1 pr-4 text-gray-700"><?= htmlspecialchars($row['send_date'], ENT_QUOTES, 'UTF-8') ?></td>
+        <td class="py-1 pr-4 text-gray-800 font-medium"><?= number_format((float) $row['avg_score'], 1) ?></td>
+        <td class="py-1 text-gray-600"><?= (int) $row['responses'] ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  <p class="mt-3 text-xs text-gray-400">Scale: 😞 1 &nbsp;|&nbsp; 😐 2 &nbsp;|&nbsp; 😐 3 &nbsp;|&nbsp; 👍 4 &nbsp;|&nbsp; 😀 5</p>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+<?php
 $content   = ob_get_clean();
 $pageTitle = htmlspecialchars($team['name'], ENT_QUOTES, 'UTF-8') . ' Dashboard';
 include __DIR__ . '/../../templates/layout.php';

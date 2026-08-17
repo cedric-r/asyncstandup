@@ -235,11 +235,41 @@ function removeMember(PDO $pdo, int $teamId, int $userId): void
 function getQuestions(PDO $pdo, int $teamId): array
 {
     $stmt = $pdo->prepare(
-        'SELECT * FROM team_questions WHERE team_id = ? ORDER BY position ASC'
+        'SELECT id, question, position, is_blocker, is_mood FROM team_questions WHERE team_id = ? ORDER BY position ASC'
     );
     $stmt->execute([$teamId]);
 
     return $stmt->fetchAll();
+}
+
+/**
+ * Set exactly one question as the blocker for this team.
+ * Clears all other is_blocker flags first (one-per-team invariant).
+ */
+function setBlockerQuestion(PDO $pdo, int $teamId, int $questionId): void
+{
+    $pdo->prepare('UPDATE team_questions SET is_blocker = 0 WHERE team_id = ?')->execute([$teamId]);
+    $pdo->prepare('UPDATE team_questions SET is_blocker = 1 WHERE id = ? AND team_id = ?')->execute([$questionId, $teamId]);
+}
+
+function clearBlockerQuestion(PDO $pdo, int $teamId): void
+{
+    $pdo->prepare('UPDATE team_questions SET is_blocker = 0 WHERE team_id = ?')->execute([$teamId]);
+}
+
+/**
+ * Set exactly one question as the mood question for this team.
+ * Clears all other is_mood flags first (one-per-team invariant).
+ */
+function setMoodQuestion(PDO $pdo, int $teamId, int $questionId): void
+{
+    $pdo->prepare('UPDATE team_questions SET is_mood = 0 WHERE team_id = ?')->execute([$teamId]);
+    $pdo->prepare('UPDATE team_questions SET is_mood = 1 WHERE id = ? AND team_id = ?')->execute([$questionId, $teamId]);
+}
+
+function clearMoodQuestion(PDO $pdo, int $teamId): void
+{
+    $pdo->prepare('UPDATE team_questions SET is_mood = 0 WHERE team_id = ?')->execute([$teamId]);
 }
 
 function addQuestion(PDO $pdo, int $teamId, string $question): void

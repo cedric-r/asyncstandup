@@ -1,6 +1,6 @@
 # IMPL-PLAN — US-31 + US-32: Question Metadata (Blocker Flagging + Mood Tracking)
 
-**Status**: PENDING GATE C APPROVAL
+**Status**: APPROVED
 **Branch**: `feature/us-31-32-question-metadata`
 **Agent**: PHP Developer (`fa2e6dbf`)
 **Stories**: US-31 (Blocker Question Flagging) + US-32 (Mood Tracking)

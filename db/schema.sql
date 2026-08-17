@@ -200,3 +200,20 @@ ALTER TABLE standup_tokens ADD COLUMN reminder_sent_at DATETIME NULL;
 -- US-30: configurable frequency
 ALTER TABLE teams ADD COLUMN frequency     VARCHAR(10) NOT NULL DEFAULT 'daily';
 ALTER TABLE teams ADD COLUMN frequency_day TINYINT(1)  NULL;
+
+-- US-31: blocker question flagging
+ALTER TABLE team_questions ADD COLUMN is_blocker TINYINT(1) NOT NULL DEFAULT 0;
+-- US-32: mood question flagging
+ALTER TABLE team_questions ADD COLUMN is_mood    TINYINT(1) NOT NULL DEFAULT 0;
+
+-- US-32: mood scores
+CREATE TABLE IF NOT EXISTS standup_mood_scores (
+    id            INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    submission_id INT UNSIGNED NOT NULL,
+    question_id   INT UNSIGNED NOT NULL,
+    score         TINYINT NOT NULL,
+    scored_at     DATETIME NOT NULL,
+    UNIQUE KEY uq_mood_submission_question (submission_id, question_id),
+    FOREIGN KEY (submission_id) REFERENCES standup_submissions(id),
+    FOREIGN KEY (question_id)   REFERENCES team_questions(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
