@@ -31,9 +31,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!in_array($timezone, $allTzs, true)) { $errors[] = 'Invalid timezone.'; }
     if (!preg_match('/^\d{2}:\d{2}$/', $standupTime)) { $errors[] = 'Standup time must be HH:MM.'; }
     $summaryToAllDevelopers = isset($_POST['summary_to_all_developers']) ? 1 : 0;
+    $frequency    = in_array($_POST['frequency'] ?? '', ['daily', 'weekdays', 'weekly'], true)
+                    ? $_POST['frequency'] : 'daily';
+    $frequencyDay = ($frequency === 'weekly')
+                    ? max(1, min(7, (int) ($_POST['frequency_day'] ?? 1)))
+                    : null;
 
     if (empty($errors)) {
-        updateTeam($pdo, $teamId, $name, $timezone, $standupTime . ':00', $summaryToAllDevelopers);
+        updateTeam($pdo, $teamId, $name, $timezone, $standupTime . ':00', $summaryToAllDevelopers, $frequency, $frequencyDay);
         setFlash('success', 'Team settings updated.');
         header('Location: /teams/edit.php?id=' . $teamId);
         exit;
@@ -87,7 +92,33 @@ ob_start();
     </label>
     <p class="text-xs text-gray-400 mt-1 ml-6">Developers receive summaries without being individually added as recipients. They can opt out via their profile.</p>
   </div>
-  <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm">Save</button>
+  <div class="mt-4">
+    <label class="block text-sm font-medium text-gray-700 mb-1">Standup frequency</label>
+    <select name="frequency" id="frequency" class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full max-w-xs">
+      <option value="daily"    <?= ($team['frequency'] ?? 'daily') === 'daily'    ? 'selected' : '' ?>>Daily (Mon–Fri)</option>
+      <option value="weekdays" <?= ($team['frequency'] ?? 'daily') === 'weekdays' ? 'selected' : '' ?>>Weekdays only</option>
+      <option value="weekly"   <?= ($team['frequency'] ?? 'daily') === 'weekly'   ? 'selected' : '' ?>>Weekly</option>
+    </select>
+  </div>
+  <div id="frequency-day-picker" class="mt-2" style="display: <?= ($team['frequency'] ?? 'daily') === 'weekly' ? 'block' : 'none' ?>;">
+    <label class="block text-sm font-medium text-gray-700 mb-1">Which day?</label>
+    <select name="frequency_day" class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full max-w-xs">
+      <option value="1" <?= ($team['frequency_day'] ?? 1) == 1 ? 'selected' : '' ?>>Monday</option>
+      <option value="2" <?= ($team['frequency_day'] ?? 1) == 2 ? 'selected' : '' ?>>Tuesday</option>
+      <option value="3" <?= ($team['frequency_day'] ?? 1) == 3 ? 'selected' : '' ?>>Wednesday</option>
+      <option value="4" <?= ($team['frequency_day'] ?? 1) == 4 ? 'selected' : '' ?>>Thursday</option>
+      <option value="5" <?= ($team['frequency_day'] ?? 1) == 5 ? 'selected' : '' ?>>Friday</option>
+      <option value="6" <?= ($team['frequency_day'] ?? 1) == 6 ? 'selected' : '' ?>>Saturday</option>
+      <option value="7" <?= ($team['frequency_day'] ?? 1) == 7 ? 'selected' : '' ?>>Sunday</option>
+    </select>
+  </div>
+  <script>
+  document.getElementById('frequency').addEventListener('change', function () {
+    document.getElementById('frequency-day-picker').style.display =
+      this.value === 'weekly' ? 'block' : 'none';
+  });
+  </script>
+  <button type="submit" class="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm">Save</button>
 </form>
 </div>
 <?php

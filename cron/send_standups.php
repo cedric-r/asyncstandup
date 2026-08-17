@@ -35,14 +35,6 @@ foreach ($teams as $team) {
     $nowLocal = $nowUtc->setTimezone($teamTz);
     $sendDate = $nowLocal->format('Y-m-d');
 
-    // Feature 3: skip weekends in the team's local timezone.
-    // format('N') = ISO 8601 day-of-week: 1=Mon … 7=Sun.
-    $dayOfWeek = (int) $nowLocal->format('N');
-
-    if ($dayOfWeek === 6 || $dayOfWeek === 7) {
-        continue; // Saturday or Sunday — no emails for this team.
-    }
-
     // ── Pass 1: Prompt emails ────────────────────────────────────────────────
     if (isTeamDue($team, $nowUtc)) {
         $developers = getDeveloperMembers($pdo, (int) $team['id']);

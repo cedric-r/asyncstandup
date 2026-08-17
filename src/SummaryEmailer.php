@@ -7,8 +7,19 @@ declare(strict_types=1);
  */
 function isSummaryDue(array $team, DateTimeImmutable $nowUtc): bool
 {
-    $teamTz   = new DateTimeZone($team['timezone']);
-    $nowLocal = $nowUtc->setTimezone($teamTz);
+    $teamTz    = new DateTimeZone($team['timezone']);
+    $nowLocal  = $nowUtc->setTimezone($teamTz);
+    $dayOfWeek = (int) $nowLocal->format('N'); // 1=Mon … 7=Sun
+    $frequency = $team['frequency'] ?? 'daily';
+
+    // Frequency guard (mirrors isTeamDue)
+    if ($frequency === 'weekly') {
+        if ($dayOfWeek !== (int) ($team['frequency_day'] ?? 1)) {
+            return false;
+        }
+    } elseif ($dayOfWeek === 6 || $dayOfWeek === 7) {
+        return false;
+    }
 
     $scheduledLocal = DateTimeImmutable::createFromFormat(
         'Y-m-d H:i',

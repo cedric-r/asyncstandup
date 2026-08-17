@@ -20,9 +20,25 @@ function getAllTeams(PDO $pdo): array
  */
 function isTeamDue(array $team, DateTimeImmutable $nowUtc): bool
 {
-    $teamTz   = new DateTimeZone($team['timezone']);
-    $nowLocal = $nowUtc->setTimezone($teamTz);
+    $teamTz    = new DateTimeZone($team['timezone']);
+    $nowLocal  = $nowUtc->setTimezone($teamTz);
+    $dayOfWeek = (int) $nowLocal->format('N'); // 1=Mon … 7=Sun
 
+    $frequency = $team['frequency'] ?? 'daily';
+
+    // Frequency guard
+    if ($frequency === 'weekly') {
+        $targetDay = (int) ($team['frequency_day'] ?? 1);
+        if ($dayOfWeek !== $targetDay) {
+            return false; // not the configured weekday
+        }
+    } elseif ($frequency === 'daily' || $frequency === 'weekdays') {
+        if ($dayOfWeek === 6 || $dayOfWeek === 7) {
+            return false; // weekend — skip
+        }
+    }
+
+    // Time proximity check (unchanged)
     $scheduledLocal = DateTimeImmutable::createFromFormat(
         'Y-m-d H:i',
         $nowLocal->format('Y-m-d') . ' ' . substr((string) $team['standup_time'], 0, 5),

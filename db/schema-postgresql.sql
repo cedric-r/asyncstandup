@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS teams (
     timezone                  TEXT NOT NULL,
     standup_time              TIME NOT NULL,
     summary_to_all_developers BOOLEAN NOT NULL DEFAULT FALSE,
+    frequency                 VARCHAR(10) NOT NULL DEFAULT 'daily',
+    frequency_day             SMALLINT NULL,
     status                    TEXT NOT NULL DEFAULT 'active',
     created_by                INTEGER NULL REFERENCES users(id),
     created_at                TIMESTAMP NOT NULL DEFAULT NOW()
@@ -149,3 +151,7 @@ ALTER TABLE teams ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'
 
 -- US-29: submission reminder tracking
 ALTER TABLE standup_tokens ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMP NULL;
+
+-- US-30: configurable frequency
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS frequency     VARCHAR(10) NOT NULL DEFAULT 'daily';
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS frequency_day SMALLINT NULL;
