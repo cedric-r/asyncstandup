@@ -19,17 +19,16 @@ $pdo    = getDb($config);
 $teamId = isset($_GET['team_id']) ? (int) $_GET['team_id'] : 0;
 
 // ── Access control ────────────────────────────────────────────────────────────
-$userId      = (int) $_SESSION['user_id'];
-$isOwner     = $teamId > 0 && isTeamOwner($pdo, $teamId, $userId);
-$isDeveloper = $teamId > 0 && isDeveloperMember($pdo, $teamId, $userId);
+$userId = (int) $_SESSION['user_id'];
 
-if (!$isOwner && !$isDeveloper) { forbid(); }
+if ($teamId < 1 || !canAccessResponses($pdo, $teamId, $userId)) { forbid(); }
 
 $team = getTeamById($pdo, $teamId);
 if ($team === null) { forbid(); }
 
+$isOwner   = isTeamOwner($pdo, $teamId, $userId);
 // Owners always see all; developers see all only when summary_to_all_developers = 1.
-$canSeeAll = $isOwner || (bool) ($team['summary_to_all_developers'] ?? 0);
+$canSeeAll = canSeeAllMemberResponses($isOwner, $team);
 
 // ── Load page data ────────────────────────────────────────────────────────────
 $members   = getDeveloperMembers($pdo, $teamId);

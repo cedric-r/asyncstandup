@@ -15,13 +15,13 @@ class MemberAnswerHistoryTest extends TestCase
         $this->pdo = createTestPdo();
     }
 
+    // ── Test 1: isDeveloperMember() ───────────────────────────────────────────
+
     public function testIsDeveloperMemberReturnsTrueForDeveloper(): void
     {
         $userId = seedUser($this->pdo, 'dev@x.com', 'Dev User');
         $orgId  = seedOrg($this->pdo, $userId);
         $teamId = seedTeam($this->pdo, $orgId, $userId);
-
-        // seedTeamMember defaults is_developer = 1
         seedTeamMember($this->pdo, $teamId, $userId, 0, 1);
 
         $this->assertTrue(isDeveloperMember($this->pdo, $teamId, $userId));
@@ -34,7 +34,6 @@ class MemberAnswerHistoryTest extends TestCase
         $teamId  = seedTeam($this->pdo, $orgId, $ownerId);
 
         $recipId = seedUser($this->pdo, 'rec@x.com', 'Recipient');
-        // is_developer = 0, is_recipient = 1
         $this->pdo->prepare(
             'INSERT INTO team_members (team_id, user_id, is_owner, is_developer, is_recipient) VALUES (?, ?, 0, 0, 1)'
         )->execute([$teamId, $recipId]);
@@ -42,43 +41,52 @@ class MemberAnswerHistoryTest extends TestCase
         $this->assertFalse(isDeveloperMember($this->pdo, $teamId, $recipId));
     }
 
-    public function testRecipientOnlyCannotAccessResponsesPage(): void
+    // ── Test 3: canAccessResponses() — recipient-only is denied ──────────────
+
+    public function testRecipientOnlyCannotAccessResponses(): void
     {
-        // Simulate the access control logic from responses.php directly
-        $isOwner     = false; // recipient is not an owner
-        $isDeveloper = false; // recipient is not a developer
+        $ownerId = seedUser($this->pdo, 'owner@x.com', 'Owner');
+        $orgId   = seedOrg($this->pdo, $ownerId);
+        $teamId  = seedTeam($this->pdo, $orgId, $ownerId);
 
-        $canAccess = $isOwner || $isDeveloper;
+        // Seed a recipient-only member (is_developer = 0, is_owner = 0)
+        $recipId = seedUser($this->pdo, 'rec@x.com', 'Recipient');
+        $this->pdo->prepare(
+            'INSERT INTO team_members (team_id, user_id, is_owner, is_developer, is_recipient) VALUES (?, ?, 0, 0, 1)'
+        )->execute([$teamId, $recipId]);
 
-        $this->assertFalse($canAccess, 'Recipient-only member must be denied access to responses page');
+        $this->assertFalse(
+            canAccessResponses($this->pdo, $teamId, $recipId),
+            'Recipient-only member must be denied access to the responses page'
+        );
     }
 
-    public function testDeveloperWithoutSummaryToAllForcesOwnFilter(): void
+    // ── Test 4: canSeeAllMemberResponses() — summary_to_all = 0 ─────────────
+
+    public function testDeveloperWithoutSummaryFlagCannotSeeAll(): void
     {
-        $userId = seedUser($this->pdo, 'dev@x.com', 'Dev User');
+        $userId = seedUser($this->pdo, 'dev@x.com', 'Dev');
         $orgId  = seedOrg($this->pdo, $userId);
+        // seedTeam sets summary_to_all_developers = 0 (default)
         $teamId = seedTeam($this->pdo, $orgId, $userId);
         seedTeamMember($this->pdo, $teamId, $userId, 0, 1);
 
-        // summary_to_all_developers = 0 (default from seedTeam)
-        $team = ['summary_to_all_developers' => 0];
+        $team = ['id' => $teamId, 'summary_to_all_developers' => 0];
 
-        $isOwner   = false;
-        $canSeeAll = $isOwner || (bool) ($team['summary_to_all_developers'] ?? 0);
+        // Developer is not an owner
+        $canSeeAll = canSeeAllMemberResponses(false, $team);
 
-        $this->assertFalse($canSeeAll, 'Developer without summary_to_all should not see all members');
-
-        // Simulate the forced filter: when !$canSeeAll, memberFilter = $userId
-        $memberFilter = $canSeeAll ? null : $userId;
-        $this->assertSame($userId, $memberFilter);
+        $this->assertFalse($canSeeAll, 'Developer without summary_to_all_developers should not see all members');
     }
 
-    public function testDeveloperWithSummaryToAllCanSeeAllMembers(): void
+    // ── Test 5: canSeeAllMemberResponses() — summary_to_all = 1 ─────────────
+
+    public function testDeveloperWithSummaryFlagCanSeeAll(): void
     {
         $ownerId = seedUser($this->pdo, 'owner@x.com', 'Owner');
         $orgId   = seedOrg($this->pdo, $ownerId);
 
-        // summary_to_all_developers = 1
+        // Insert team with summary_to_all_developers = 1
         $this->pdo->prepare(
             'INSERT INTO teams (org_id, name, timezone, standup_time, summary_to_all_developers, created_by) VALUES (?, ?, ?, ?, 1, ?)'
         )->execute([$orgId, 'Open Team', 'UTC', '09:00:00', $ownerId]);
@@ -87,15 +95,14 @@ class MemberAnswerHistoryTest extends TestCase
         $devId = seedUser($this->pdo, 'dev@x.com', 'Dev');
         seedTeamMember($this->pdo, $teamId, $devId, 0, 1);
 
-        $team = ['summary_to_all_developers' => 1];
+        // Fetch the actual team row (as responses.php does via getTeamById)
+        $stmt = $this->pdo->prepare('SELECT * FROM teams WHERE id = ?');
+        $stmt->execute([$teamId]);
+        $team = $stmt->fetch();
 
-        $isOwner   = false;
-        $canSeeAll = $isOwner || (bool) ($team['summary_to_all_developers'] ?? 0);
+        // Developer is not an owner
+        $canSeeAll = canSeeAllMemberResponses(false, $team);
 
-        $this->assertTrue($canSeeAll, 'Developer with summary_to_all = 1 should be able to see all members');
-
-        // No forced filter — member_id GET param would be honoured
-        $memberFilter = null; // unrestricted
-        $this->assertNull($memberFilter);
+        $this->assertTrue($canSeeAll, 'Developer with summary_to_all_developers = 1 should see all members');
     }
 }

@@ -173,6 +173,26 @@ function isDeveloperMember(PDO $pdo, int $teamId, int $userId): bool
     return $stmt->fetchColumn() !== false;
 }
 
+/**
+ * Whether the user may access the standup responses page for a team.
+ * True if the user is a team owner OR a developer member.
+ */
+function canAccessResponses(PDO $pdo, int $teamId, int $userId): bool
+{
+    return isTeamOwner($pdo, $teamId, $userId) || isDeveloperMember($pdo, $teamId, $userId);
+}
+
+/**
+ * Whether the user may see all members' responses (not just their own).
+ * True for owners or when the team has summary_to_all_developers enabled.
+ *
+ * @param array<string, mixed> $team Full team row from getTeamById().
+ */
+function canSeeAllMemberResponses(bool $isOwner, array $team): bool
+{
+    return $isOwner || (bool) ($team['summary_to_all_developers'] ?? 0);
+}
+
 function getTeamMembers(PDO $pdo, int $teamId): array
 {
     $stmt = $pdo->prepare('

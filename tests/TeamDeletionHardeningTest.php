@@ -65,6 +65,7 @@ class TeamDeletionHardeningTest extends TestCase
 
         // All child tables empty
         $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM team_members')->fetchColumn());
+        $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM team_questions')->fetchColumn());
         $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM standup_tokens')->fetchColumn());
         $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM standup_submissions')->fetchColumn());
         $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM standup_answers')->fetchColumn());
@@ -84,14 +85,12 @@ class TeamDeletionHardeningTest extends TestCase
         deleteTeam($this->pdo, $teamId1);
 
         // Team 2's recipient must survive
-        $count = (int) $this->pdo->prepare('SELECT COUNT(*) FROM team_recipients WHERE team_id = ?')
-            ->execute([$teamId2]) ?: 0;
         $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM team_recipients WHERE team_id = ?');
         $stmt->execute([$teamId2]);
         $this->assertSame(1, (int) $stmt->fetchColumn());
     }
 
-    public function testDeleteTeamIsTransactional(): void
+    public function testDeleteTeamSucceedsAtomically(): void
     {
         $teamId = seedTeam($this->pdo, $this->orgId, $this->userId);
         seedTeamMember($this->pdo, $teamId, $this->userId);
