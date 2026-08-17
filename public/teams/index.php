@@ -40,7 +40,10 @@ ob_start();
 <?php else: ?>
 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 <?php foreach ($teams as $team): ?>
-  <?php $isTOwner = isTeamOwner($pdo, (int) $team['id'], (int) $_SESSION['user_id']); ?>
+  <?php
+    $isTOwner     = isTeamOwner($pdo, (int) $team['id'], (int) $_SESSION['user_id']);
+    $isTDeveloper = isDeveloperMember($pdo, (int) $team['id'], (int) $_SESSION['user_id']);
+  ?>
   <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
     <p class="font-semibold text-gray-900 mb-1"><?= htmlspecialchars($team['name'], ENT_QUOTES, 'UTF-8') ?>
       <?php if (($team['status'] ?? 'active') === 'suspended'): ?>
@@ -70,6 +73,14 @@ ob_start();
           <button type="submit" class="text-xs bg-amber-500 hover:bg-amber-600 text-white font-medium py-1 px-2.5 rounded">Suspend</button>
         </form>
       <?php endif; ?>
+    </div>
+    <?php endif; ?>
+    <?php if (!$isTOwner && $isTDeveloper): ?>
+    <div class="flex flex-wrap gap-1.5 mt-2">
+      <?php $histLabel = ((int) ($team['summary_to_all_developers'] ?? 0) === 1) ? 'Responses' : 'My History'; ?>
+      <a href="/teams/responses.php?team_id=<?= (int) $team['id'] ?>" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-1 px-2.5 rounded">
+        <?= htmlspecialchars($histLabel, ENT_QUOTES, 'UTF-8') ?>
+      </a>
     </div>
     <?php endif; ?>
   </div>

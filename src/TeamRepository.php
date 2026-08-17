@@ -163,6 +163,16 @@ function isTeamMember(PDO $pdo, int $teamId, int $userId): bool
     return $stmt->fetchColumn() !== false;
 }
 
+function isDeveloperMember(PDO $pdo, int $teamId, int $userId): bool
+{
+    $stmt = $pdo->prepare(
+        'SELECT 1 FROM team_members WHERE team_id = ? AND user_id = ? AND is_developer = 1'
+    );
+    $stmt->execute([$teamId, $userId]);
+
+    return $stmt->fetchColumn() !== false;
+}
+
 function getTeamMembers(PDO $pdo, int $teamId): array
 {
     $stmt = $pdo->prepare('
