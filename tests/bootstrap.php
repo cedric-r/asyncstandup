@@ -12,6 +12,7 @@ declare(strict_types=1);
 // at file scope, which would suppress PHPUnit's own error output.
 // =============================================================================
 
+require_once __DIR__ . '/../src/Db.php';
 require_once __DIR__ . '/../src/StandupEmailer.php';
 require_once __DIR__ . '/../src/SummaryEmailer.php';
 require_once __DIR__ . '/../src/InvitationRepository.php';

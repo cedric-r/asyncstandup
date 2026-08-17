@@ -16,13 +16,29 @@ return [
     'app_name' => 'AsyncStandUp',
 
     // ── Database ─────────────────────────────────────────────────────────────
+    // Set 'driver' to 'mysql', 'pgsql', or 'sqlite'.
+    //
+    // MySQL example (default):
+    //   'driver' => 'mysql', 'host' => '127.0.0.1', 'port' => 3306,
+    //   'name' => 'asyncstandup', 'user' => 'root', 'pass' => '', 'charset' => 'utf8mb4'
+    //
+    // PostgreSQL example:
+    //   'driver' => 'pgsql', 'host' => '127.0.0.1', 'port' => 5432,
+    //   'name' => 'asyncstandup', 'user' => 'postgres', 'pass' => ''
+    //
+    // SQLite example (development / testing):
+    //   'driver' => 'sqlite', 'path' => '/var/data/asyncstandup.sqlite'
+    //   (host, port, name, user, pass, charset are ignored for sqlite)
+    //
     'db' => [
+        'driver'  => 'mysql',
         'host'    => '127.0.0.1',
         'port'    => 3306,
         'name'    => 'asyncstandup',
         'user'    => 'root',
         'pass'    => '',
-        'charset' => 'utf8mb4',
+        'charset' => 'utf8mb4',   // MySQL only; ignored for pgsql/sqlite
+        'path'    => '',          // SQLite only; path to .sqlite file
     ],
 
     // ── SMTP (plain relay — no AUTH) ─────────────────────────────────────────
