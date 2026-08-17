@@ -63,12 +63,22 @@ function createTeam(PDO $pdo, int $orgId, string $name, string $timezone, string
     return $teamId;
 }
 
-function updateTeam(PDO $pdo, int $teamId, string $name, string $timezone, string $standupTime, int $summaryToAllDevelopers = 0): void
-{
-    $stmt = $pdo->prepare(
-        'UPDATE teams SET name = ?, timezone = ?, standup_time = ?, summary_to_all_developers = ? WHERE id = ?'
-    );
-    $stmt->execute([trim($name), $timezone, $standupTime, $summaryToAllDevelopers, $teamId]);
+function updateTeam(
+    PDO $pdo,
+    int $teamId,
+    string $name,
+    string $timezone,
+    string $standupTime,
+    int $summaryToAllDevelopers = 0,
+    string $frequency = 'daily',
+    ?int $frequencyDay = null
+): void {
+    $pdo->prepare(
+        'UPDATE teams SET name = ?, timezone = ?, standup_time = ?,
+         summary_to_all_developers = ?, frequency = ?, frequency_day = ?
+         WHERE id = ?'
+    )->execute([trim($name), $timezone, $standupTime, $summaryToAllDevelopers,
+                $frequency, $frequencyDay, $teamId]);
 }
 
 function suspendTeam(PDO $pdo, int $teamId): void

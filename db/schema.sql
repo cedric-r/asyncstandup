@@ -196,3 +196,7 @@ ALTER TABLE teams ADD COLUMN status VARCHAR(10) NOT NULL DEFAULT 'active';
 
 -- US-29: submission reminder tracking
 ALTER TABLE standup_tokens ADD COLUMN reminder_sent_at DATETIME NULL;
+
+-- US-30: configurable frequency
+ALTER TABLE teams ADD COLUMN frequency     VARCHAR(10) NOT NULL DEFAULT 'daily';
+ALTER TABLE teams ADD COLUMN frequency_day TINYINT(1)  NULL;
