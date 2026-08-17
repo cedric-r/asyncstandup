@@ -33,14 +33,18 @@ function isSummaryDue(array $team, DateTimeImmutable $nowUtc): bool
  * Uses INSERT IGNORE as the dedup guard. Returns true only if the row was newly
  * inserted — false means a summary was already sent (or is being sent concurrently).
  */
-function attemptInsertSummaryLock(PDO $pdo, int $teamId, string $sendDate): bool
+function attemptInsertSummaryLock(PDO $pdo, string $driver, int $teamId, string $sendDate): bool
 {
-    $stmt = $pdo->prepare(
-        'INSERT IGNORE INTO summary_sent (team_id, send_date, sent_at) VALUES (?, ?, UTC_TIMESTAMP())'
+    $sentAt   = gmdate('Y-m-d H:i:s'); // UTC — driver-portable alternative to UTC_TIMESTAMP()
+    $inserted = dbInsertIgnore(
+        $pdo,
+        $driver,
+        'summary_sent',
+        ['team_id', 'send_date', 'sent_at'],
+        [$teamId, $sendDate, $sentAt]
     );
-    $stmt->execute([$teamId, $sendDate]);
 
-    return $stmt->rowCount() > 0;
+    return $inserted > 0;
 }
 
 /**
@@ -209,7 +213,7 @@ function sendSummaryEmail(PDO $pdo, array $config, array $team, string $sendDate
     $teamId = (int) $team['id'];
 
     // Dedup guard — exit if already sent.
-    if (!attemptInsertSummaryLock($pdo, $teamId, $sendDate)) {
+    if (!attemptInsertSummaryLock($pdo, $config['db']['driver'], $teamId, $sendDate)) {
         return;
     }
 
