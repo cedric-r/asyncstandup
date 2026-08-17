@@ -193,3 +193,6 @@ CREATE TABLE IF NOT EXISTS password_reset_requests (
 
 -- US-26: team suspension
 ALTER TABLE teams ADD COLUMN status VARCHAR(10) NOT NULL DEFAULT 'active';
+
+-- US-29: submission reminder tracking
+ALTER TABLE standup_tokens ADD COLUMN reminder_sent_at DATETIME NULL;
