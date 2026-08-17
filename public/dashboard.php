@@ -80,6 +80,9 @@ ob_start();
         <a href="/teams/dashboard.php?team_id=<?= (int) $team['id'] ?>" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 px-3 rounded-md">Dashboard</a>
         <a href="/teams/edit.php?id=<?= (int) $team['id'] ?>" class="text-xs bg-white hover:bg-gray-50 text-gray-700 font-medium py-1.5 px-3 rounded-md border border-gray-300">Settings</a>
         <?php endif; ?>
+        <?php if ($team['is_developer']): ?>
+        <a href="/teams/responses.php?team_id=<?= (int) $team['id'] ?>" class="text-xs bg-white hover:bg-gray-50 text-gray-700 font-medium py-1.5 px-3 rounded-md border border-gray-300">History</a>
+        <?php endif; ?>
       </div>
     </div>
   <?php endforeach; ?>

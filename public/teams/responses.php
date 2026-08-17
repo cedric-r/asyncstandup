@@ -18,17 +18,34 @@ requireLogin();
 $pdo    = getDb($config);
 $teamId = isset($_GET['team_id']) ? (int) $_GET['team_id'] : 0;
 
-if (!$teamId || !isTeamOwner($pdo, $teamId, (int) $_SESSION['user_id'])) { forbid(); }
+// ── Access control ────────────────────────────────────────────────────────────
+$userId = (int) $_SESSION['user_id'];
 
-$team      = getTeamById($pdo, $teamId);
+if ($teamId < 1 || !canAccessResponses($pdo, $teamId, $userId)) { forbid(); }
+
+$team = getTeamById($pdo, $teamId);
+if ($team === null) { forbid(); }
+
+$isOwner   = isTeamOwner($pdo, $teamId, $userId);
+// Owners always see all; developers see all only when summary_to_all_developers = 1.
+$canSeeAll = canSeeAllMemberResponses($isOwner, $team);
+
+// ── Load page data ────────────────────────────────────────────────────────────
 $members   = getDeveloperMembers($pdo, $teamId);
 $questions = getQuestions($pdo, $teamId);
 
 $rawDate   = $_GET['date'] ?? null;
 $rawMember = isset($_GET['member_id']) ? (int) $_GET['member_id'] : null;
 
+// When developer cannot see all, ignore any member_id GET param and force own user.
+if (!$canSeeAll) {
+    $rawMember    = null;
+    $memberFilter = $userId;
+} else {
+    $memberFilter = null;
+}
+
 $dateFilter   = null;
-$memberFilter = null;
 $filterErrors = [];
 
 if ($rawDate !== null && $rawDate !== '') {
@@ -40,20 +57,27 @@ if ($rawDate !== null && $rawDate !== '') {
     }
 }
 
-if ($rawMember !== null && $rawMember > 0) {
+if ($canSeeAll && $rawMember !== null && $rawMember > 0) {
     $memberIds = array_map('intval', array_column($members, 'id'));
     if (!in_array($rawMember, $memberIds, true)) { $filterErrors[] = 'Invalid member.'; }
     else { $memberFilter = $rawMember; }
 }
 
-$teamTz  = new DateTimeZone($team['timezone']);
-$today   = new DateTimeImmutable('today', $teamTz);
+$teamTz   = new DateTimeZone($team['timezone']);
+$today    = new DateTimeImmutable('today', $teamTz);
 $dateFrom = $memberFilter !== null ? $today->modify('-29 days')->format('Y-m-d') : $today->modify('-6 days')->format('Y-m-d');
 $dateTo   = $today->format('Y-m-d');
 
 $view = ($dateFilter !== null && $memberFilter !== null) ? 'single'
      : ($dateFilter !== null ? 'by_date'
      : ($memberFilter !== null ? 'by_member' : 'default'));
+
+$currentUser = getCurrentUser($pdo);
+
+// Fill-in loop should only show the current user when they cannot see all members.
+$fillMembers = $canSeeAll
+    ? $members
+    : [['id' => $userId, 'display_name' => $currentUser['display_name'] ?? '']];
 
 $data = [];
 if (empty($filterErrors)) {
@@ -70,7 +94,7 @@ if (empty($filterErrors)) {
     }
     if ($view === 'default' || $view === 'by_date') {
         foreach (array_keys($data) as $date) {
-            foreach ($members as $m) {
+            foreach ($fillMembers as $m) {
                 $uid = (int) $m['id'];
                 if (!isset($data[$date][$uid])) {
                     $data[$date][$uid] = ['display_name' => $m['display_name'], 'submitted' => false, 'answers' => [], 'no_token' => true];
@@ -88,26 +112,27 @@ $orgId    = (int) $team['org_id'];
 $orgName  = (string) ($org['name'] ?? '');
 $teamName = (string) $team['name'];
 $currentPage = 'responses';
-$isOwner  = true;
 
 $flash       = getFlash();
-$currentUser = getCurrentUser($pdo);
+$pageHeading = $canSeeAll ? 'Standup Responses' : 'My Standup History';
 
 ob_start();
 ?>
 <?php include __DIR__ . '/../../templates/team-nav.php'; ?>
-<h1 class="text-xl font-bold text-gray-900 mb-4">Standup Responses</h1>
+<h1 class="text-xl font-bold text-gray-900 mb-4"><?= htmlspecialchars($pageHeading, ENT_QUOTES, 'UTF-8') ?></h1>
 
 <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
 <form method="GET" action="/teams/responses.php" class="flex flex-wrap items-end gap-3">
   <input type="hidden" name="team_id" value="<?= $teamId ?>">
   <div><label class="block text-xs text-gray-600 mb-1">Date</label><input type="date" name="date" value="<?= htmlspecialchars($dateFilter ?? '', ENT_QUOTES, 'UTF-8') ?>" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></div>
+  <?php if ($canSeeAll): ?>
   <div><label class="block text-xs text-gray-600 mb-1">Member</label>
     <select name="member_id" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
       <option value="">All</option>
       <?php foreach ($members as $m): ?><option value="<?= (int) $m['id'] ?>" <?= $memberFilter === (int) $m['id'] ? 'selected' : '' ?>><?= htmlspecialchars($m['display_name'] ?? $m['email'], ENT_QUOTES, 'UTF-8') ?></option><?php endforeach; ?>
     </select>
   </div>
+  <?php endif; ?>
   <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg">Apply</button>
   <a href="/teams/responses.php?team_id=<?= $teamId ?>" class="bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium py-2 px-4 rounded-lg border border-gray-300">Clear</a>
 </form>
@@ -143,5 +168,5 @@ ob_start();
 <?php endif; ?>
 <?php
 $content   = ob_get_clean();
-$pageTitle = 'Responses — ' . htmlspecialchars($team['name'], ENT_QUOTES, 'UTF-8');
+$pageTitle = ($canSeeAll ? 'Responses' : 'My History') . ' — ' . htmlspecialchars($team['name'], ENT_QUOTES, 'UTF-8');
 include __DIR__ . '/../../templates/layout.php';
