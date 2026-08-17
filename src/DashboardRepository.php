@@ -226,3 +226,27 @@ function getPendingTokensForUser(PDO $pdo, int $userId): array
 
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+/**
+ * Return daily average mood scores for a team over a date range.
+ *
+ * @return array{send_date: string, avg_score: string, responses: int}[]
+ */
+function getMoodTrend(PDO $pdo, int $teamId, string $dateFrom, string $dateTo): array
+{
+    $stmt = $pdo->prepare('
+        SELECT t.send_date, AVG(ms.score) AS avg_score, COUNT(ms.id) AS responses
+        FROM standup_tokens t
+        JOIN standup_submissions ss ON ss.token_id = t.id
+        JOIN standup_mood_scores ms ON ms.submission_id = ss.id
+        JOIN team_questions q       ON q.id = ms.question_id
+        WHERE t.team_id = ?
+          AND t.send_date BETWEEN ? AND ?
+          AND q.is_mood = 1
+        GROUP BY t.send_date
+        ORDER BY t.send_date ASC
+    ');
+    $stmt->execute([$teamId, $dateFrom, $dateTo]);
+
+    return $stmt->fetchAll();
+}

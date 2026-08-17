@@ -15,6 +15,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/../src/Db.php';
 require_once __DIR__ . '/../src/StandupEmailer.php';
 require_once __DIR__ . '/../src/SummaryEmailer.php';
+require_once __DIR__ . '/../src/TeamRepository.php';
+require_once __DIR__ . '/../src/DashboardRepository.php';
 require_once __DIR__ . '/../src/InvitationRepository.php';
 require_once __DIR__ . '/../src/OrgRepository.php';
 require_once __DIR__ . '/../src/SubmissionRepository.php';

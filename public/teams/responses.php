@@ -156,8 +156,12 @@ ob_start();
     <?php else: ?>
       <dl class="space-y-1">
       <?php foreach ($questions as $q): ?>
-        <dt class="text-xs font-medium text-gray-600"><?= htmlspecialchars($q['question'], ENT_QUOTES, 'UTF-8') ?></dt>
-        <dd class="text-sm text-gray-800 ml-3"><?php $ans = $entry['answers'][(int) $q['id']] ?? null; echo $ans !== null && $ans !== '' ? nl2br(htmlspecialchars($ans, ENT_QUOTES, 'UTF-8')) : '<span class="text-gray-400 text-xs">(no answer)</span>'; ?></dd>
+        <?php $isBlocker = (int) ($q['is_blocker'] ?? 0) === 1; $ans = $entry['answers'][(int) $q['id']] ?? null; $hasAnswer = $ans !== null && $ans !== ''; ?>
+        <dt class="text-xs font-medium <?= $isBlocker ? 'text-red-700' : 'text-gray-600' ?> mb-0.5">
+          <?= htmlspecialchars($q['question'], ENT_QUOTES, 'UTF-8') ?>
+          <?php if ($isBlocker): ?><span class="ml-1 text-xs bg-red-100 text-red-700 px-1 rounded">blocker</span><?php endif; ?>
+        </dt>
+        <dd class="text-sm <?= ($isBlocker && $hasAnswer) ? 'text-red-800 font-medium' : 'text-gray-800' ?> ml-3"><?php echo $hasAnswer ? nl2br(htmlspecialchars($ans, ENT_QUOTES, 'UTF-8')) : '<span class="text-gray-400 text-xs">(no answer)</span>'; ?></dd>
       <?php endforeach; ?>
       </dl>
     <?php endif; ?>

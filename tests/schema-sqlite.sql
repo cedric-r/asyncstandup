@@ -70,6 +70,8 @@ CREATE TABLE IF NOT EXISTS team_questions (
     team_id    INTEGER NOT NULL,
     question   TEXT NOT NULL,
     position   INTEGER NOT NULL,
+    is_blocker INTEGER NOT NULL DEFAULT 0,
+    is_mood    INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (team_id) REFERENCES teams(id)
 );
@@ -165,4 +167,15 @@ CREATE TABLE IF NOT EXISTS password_reset_requests (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id      INTEGER NOT NULL,
     requested_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS standup_mood_scores (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    submission_id INTEGER NOT NULL,
+    question_id   INTEGER NOT NULL,
+    score         INTEGER NOT NULL,
+    scored_at     TEXT NOT NULL,
+    UNIQUE(submission_id, question_id),
+    FOREIGN KEY (submission_id) REFERENCES standup_submissions(id),
+    FOREIGN KEY (question_id)   REFERENCES team_questions(id)
 );

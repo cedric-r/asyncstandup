@@ -19,7 +19,12 @@
 
 <?php foreach ($questions as $q): ?>
 <?= $q['question'] ?>
-<?= !empty($sub['answers'][(int) $q['id']]) ? $sub['answers'][(int) $q['id']] : '(no answer)' ?>
+<?php
+$answer    = !empty($sub['answers'][(int) $q['id']]) ? $sub['answers'][(int) $q['id']] : '';
+$isBlocker = (bool) ($q['is_blocker'] ?? false);
+$prefix    = ($isBlocker && $answer !== '') ? '⚠️ BLOCKER — ' : '';
+echo $prefix . ($answer !== '' ? $answer : '(no answer)');
+?>
 
 <?php endforeach; ?>
 <?php endforeach; ?>
