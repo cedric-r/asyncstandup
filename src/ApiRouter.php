@@ -224,10 +224,15 @@ function handlePostSubmission(PDO $pdo, array $apiKey, int $teamId): never
     if ($existingToken !== false) {
         $tokenId = (int) $existingToken['id'];
     } else {
-        $tokenId = createStandupToken($pdo, $teamId, $userId, $sendDate, $nowUtc);
-        if ($tokenId === null) {
+        // createStandupToken() returns the hex token string, not the row id.
+        $tokenString = createStandupToken($pdo, $teamId, $userId, $sendDate, $nowUtc);
+        if ($tokenString === null) {
             apiError('could not create submission token', 500);
         }
+        // Fetch the integer PK for use as FK in saveSubmission().
+        $idStmt = $pdo->prepare('SELECT id FROM standup_tokens WHERE team_id = ? AND user_id = ? AND send_date = ?');
+        $idStmt->execute([$teamId, $userId, $sendDate]);
+        $tokenId = (int) $idStmt->fetchColumn();
     }
 
     // Check not already submitted.
