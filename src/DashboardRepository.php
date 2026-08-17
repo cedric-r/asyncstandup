@@ -218,6 +218,7 @@ function getPendingTokensForUser(PDO $pdo, int $userId): array
           AND st.used_at IS NULL
           AND st.expires_at > ?
           AND tm.is_developer = 1
+          AND t.status = \'active\'
         ORDER BY t.name ASC
     ');
 

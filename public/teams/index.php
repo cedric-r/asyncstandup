@@ -23,6 +23,7 @@ if ($org === null || !isOrgMember($pdo, $orgId, (int) $_SESSION['user_id'])) { f
 $flash       = getFlash();
 $currentUser = getCurrentUser($pdo);
 $teams       = getTeamsForOrg($pdo, $orgId, (int) $_SESSION['user_id']);
+$csrfToken   = generateCsrfToken();
 
 ob_start();
 ?>
@@ -41,7 +42,11 @@ ob_start();
 <?php foreach ($teams as $team): ?>
   <?php $isTOwner = isTeamOwner($pdo, (int) $team['id'], (int) $_SESSION['user_id']); ?>
   <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-    <p class="font-semibold text-gray-900 mb-1"><?= htmlspecialchars($team['name'], ENT_QUOTES, 'UTF-8') ?></p>
+    <p class="font-semibold text-gray-900 mb-1"><?= htmlspecialchars($team['name'], ENT_QUOTES, 'UTF-8') ?>
+      <?php if (($team['status'] ?? 'active') === 'suspended'): ?>
+        <span class="inline-block text-xs font-medium bg-amber-100 text-amber-700 px-2 py-0.5 rounded ml-1">[Suspended]</span>
+      <?php endif; ?>
+    </p>
     <p class="text-xs text-gray-400 mb-4"><?= htmlspecialchars(substr($team['standup_time'], 0, 5), ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars($team['timezone'], ENT_QUOTES, 'UTF-8') ?></p>
     <?php if ($isTOwner): ?>
     <div class="flex flex-wrap gap-1.5">
@@ -52,6 +57,19 @@ ob_start();
       <a href="/teams/edit.php?id=<?= (int) $team['id'] ?>" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-1 px-2.5 rounded">Settings</a>
       <a href="/teams/responses.php?team_id=<?= (int) $team['id'] ?>" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-1 px-2.5 rounded">Responses</a>
       <a href="/teams/delete.php?id=<?= (int) $team['id'] ?>" class="text-xs bg-red-50 hover:bg-red-100 text-red-700 font-medium py-1 px-2.5 rounded border border-red-200">Delete</a>
+      <?php if (($team['status'] ?? 'active') === 'suspended'): ?>
+        <form method="POST" action="/teams/suspend.php?id=<?= (int) $team['id'] ?>" class="inline">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+          <input type="hidden" name="action" value="reactivate">
+          <button type="submit" class="text-xs bg-green-600 hover:bg-green-700 text-white font-medium py-1 px-2.5 rounded">Reactivate</button>
+        </form>
+      <?php else: ?>
+        <form method="POST" action="/teams/suspend.php?id=<?= (int) $team['id'] ?>" class="inline">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+          <input type="hidden" name="action" value="suspend">
+          <button type="submit" class="text-xs bg-amber-500 hover:bg-amber-600 text-white font-medium py-1 px-2.5 rounded">Suspend</button>
+        </form>
+      <?php endif; ?>
     </div>
     <?php endif; ?>
   </div>

@@ -64,7 +64,11 @@ ob_start();
   <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
   <?php foreach ($orgTeams as $team): ?>
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-      <p class="font-semibold text-gray-900 mb-1"><?= htmlspecialchars($team['name'], ENT_QUOTES, 'UTF-8') ?></p>
+      <p class="font-semibold text-gray-900 mb-1"><?= htmlspecialchars($team['name'], ENT_QUOTES, 'UTF-8') ?>
+        <?php if (($team['status'] ?? 'active') === 'suspended'): ?>
+          <span class="inline-block text-xs font-medium bg-amber-100 text-amber-700 px-2 py-0.5 rounded ml-1">[Suspended]</span>
+        <?php endif; ?>
+      </p>
       <p class="text-xs text-gray-400 mb-4"><?= htmlspecialchars(substr($team['standup_time'], 0, 5), ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars($team['timezone'], ENT_QUOTES, 'UTF-8') ?></p>
       <div class="flex flex-wrap gap-1 mb-4">
         <?php if ($team['is_owner']): ?><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">Owner</span><?php endif; ?>
