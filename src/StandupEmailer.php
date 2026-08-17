@@ -9,7 +9,8 @@ require_once __DIR__ . '/OrgRepository.php';
  */
 function getAllTeams(PDO $pdo): array
 {
-    $stmt = $pdo->query('SELECT * FROM teams');
+    $stmt = $pdo->prepare("SELECT * FROM teams WHERE status = 'active'");
+    $stmt->execute();
 
     return $stmt->fetchAll();
 }

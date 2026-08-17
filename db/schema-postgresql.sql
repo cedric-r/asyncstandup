@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS teams (
     timezone                  TEXT NOT NULL,
     standup_time              TIME NOT NULL,
     summary_to_all_developers BOOLEAN NOT NULL DEFAULT FALSE,
+    status                    TEXT NOT NULL DEFAULT 'active',
     created_by                INTEGER NULL REFERENCES users(id),
     created_at                TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -141,3 +142,6 @@ CREATE TABLE IF NOT EXISTS password_reset_requests (
 );
 
 CREATE INDEX IF NOT EXISTS idx_prrq_user_time ON password_reset_requests (user_id, requested_at);
+
+-- US-26: team suspension (run on existing PostgreSQL installs)
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';

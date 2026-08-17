@@ -190,3 +190,6 @@ CREATE TABLE IF NOT EXISTS password_reset_requests (
     requested_at DATETIME NOT NULL,
     INDEX idx_prrq_user_time (user_id, requested_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- US-26: team suspension
+ALTER TABLE teams ADD COLUMN status VARCHAR(10) NOT NULL DEFAULT 'active';

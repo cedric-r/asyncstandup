@@ -71,46 +71,78 @@ function updateTeam(PDO $pdo, int $teamId, string $name, string $timezone, strin
     $stmt->execute([trim($name), $timezone, $standupTime, $summaryToAllDevelopers, $teamId]);
 }
 
+function suspendTeam(PDO $pdo, int $teamId): void
+{
+    $pdo->prepare("UPDATE teams SET status = 'suspended' WHERE id = ?")
+        ->execute([$teamId]);
+}
+
+function reactivateTeam(PDO $pdo, int $teamId): void
+{
+    $pdo->prepare("UPDATE teams SET status = 'active' WHERE id = ?")
+        ->execute([$teamId]);
+}
+
 /**
  * Delete a team and all cascaded data in FK-safe order.
+ *
+ * Wrapped in a transaction. Step 0 marks the team suspended immediately
+ * to block concurrent cron runs from picking it up during deletion.
+ * Subquery syntax is used for multi-table deletes — portable across
+ * MySQL, PostgreSQL, and SQLite.
  */
 function deleteTeam(PDO $pdo, int $teamId): void
 {
-    // 1. standup_answers
-    $pdo->prepare('
-        DELETE a FROM standup_answers a
-        JOIN standup_submissions ss ON ss.id = a.submission_id
-        JOIN standup_tokens t ON t.id = ss.token_id
-        WHERE t.team_id = ?
-    ')->execute([$teamId]);
+    $pdo->beginTransaction();
 
-    // 2. standup_submissions
-    $pdo->prepare('
-        DELETE ss FROM standup_submissions ss
-        JOIN standup_tokens t ON t.id = ss.token_id
-        WHERE t.team_id = ?
-    ')->execute([$teamId]);
+    try {
+        // Step 0 — mark suspended immediately (blocks concurrent cron getAllTeams() call)
+        $pdo->prepare("UPDATE teams SET status = 'suspended' WHERE id = ?")
+            ->execute([$teamId]);
 
-    // 3. standup_tokens
-    $pdo->prepare('DELETE FROM standup_tokens WHERE team_id = ?')->execute([$teamId]);
+        // Step 1 — standup_answers (subquery; portable across MySQL/pgsql/sqlite)
+        $pdo->prepare('
+            DELETE FROM standup_answers WHERE submission_id IN (
+                SELECT ss.id FROM standup_submissions ss
+                WHERE ss.token_id IN (
+                    SELECT id FROM standup_tokens WHERE team_id = ?
+                )
+            )
+        ')->execute([$teamId]);
 
-    // 4. summary_sent
-    $pdo->prepare('DELETE FROM summary_sent WHERE team_id = ?')->execute([$teamId]);
+        // Step 2 — standup_submissions
+        $pdo->prepare('
+            DELETE FROM standup_submissions WHERE token_id IN (
+                SELECT id FROM standup_tokens WHERE team_id = ?
+            )
+        ')->execute([$teamId]);
 
-    // 5. team_recipients
-    $pdo->prepare('DELETE FROM team_recipients WHERE team_id = ?')->execute([$teamId]);
+        // Step 3 — standup_tokens
+        $pdo->prepare('DELETE FROM standup_tokens WHERE team_id = ?')->execute([$teamId]);
 
-    // 6. team_questions
-    $pdo->prepare('DELETE FROM team_questions WHERE team_id = ?')->execute([$teamId]);
+        // Step 4 — summary_sent
+        $pdo->prepare('DELETE FROM summary_sent WHERE team_id = ?')->execute([$teamId]);
 
-    // 7. invitations
-    $pdo->prepare('DELETE FROM invitations WHERE team_id = ?')->execute([$teamId]);
+        // Step 5 — team_recipients (team-scoped only; cross-team rows unaffected)
+        $pdo->prepare('DELETE FROM team_recipients WHERE team_id = ?')->execute([$teamId]);
 
-    // 8. team_members
-    $pdo->prepare('DELETE FROM team_members WHERE team_id = ?')->execute([$teamId]);
+        // Step 6 — team_questions
+        $pdo->prepare('DELETE FROM team_questions WHERE team_id = ?')->execute([$teamId]);
 
-    // 9. teams
-    $pdo->prepare('DELETE FROM teams WHERE id = ?')->execute([$teamId]);
+        // Step 7 — invitations
+        $pdo->prepare('DELETE FROM invitations WHERE team_id = ?')->execute([$teamId]);
+
+        // Step 8 — team_members
+        $pdo->prepare('DELETE FROM team_members WHERE team_id = ?')->execute([$teamId]);
+
+        // Step 9 — teams row
+        $pdo->prepare('DELETE FROM teams WHERE id = ?')->execute([$teamId]);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
 }
 
 function isTeamOwner(PDO $pdo, int $teamId, int $userId): bool
