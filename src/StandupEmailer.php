@@ -161,6 +161,7 @@ function getPendingUnremindedTokens(PDO $pdo, DateTimeImmutable $nowUtc): array
           AND st.reminder_sent_at IS NULL
           AND st.expires_at > ?
           AND st.expires_at <= ?
+          AND t.status = \'active\'
     ');
     $stmt->execute([$nowStr, $windowStr]);
 
