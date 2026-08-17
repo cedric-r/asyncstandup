@@ -1,6 +1,6 @@
 # AsyncStandUp
 
-> **Async standup system** — no frameworks, no npm, no Composer in production. Pure PHP 8.1 + MySQL + raw-socket SMTP.
+> **Async standup system** — no frameworks, no npm, no Composer in production. Pure PHP 8.1 + MySQL / PostgreSQL / SQLite + raw-socket SMTP.
 
 Teams receive a daily standup prompt email, submit answers via a unique link, and a summary is emailed to recipients — all without anyone logging in to a tool during their day.
 
@@ -22,10 +22,12 @@ Teams receive a daily standup prompt email, submit answers via a unique link, an
 - 📱 **Mobile-friendly UI** — Tailwind CSS (Play CDN) responsive layout; works at 375 px
 - 🔒 **Text-based CAPTCHA** — bot deterrent on login and registration (50 question bank)
 - 🔐 **Password reset** — email-based flow with 1-hour token expiry and concurrent-use guard
-- 🌐 **Consensus alerting** — (site-monitor module) majority-vote before alert fires
+- ⏸ **Team suspension** — owners can suspend a team to pause all emails while preserving all data; one click to reactivate
+- 🗑 **Safe team deletion** — deleting a team removes all data atomically; concurrent cron jobs never send emails to a deleted team's members; recipients shared with other teams are unaffected
+- 🗄 **Configurable DB backend** — supports MySQL, PostgreSQL, and SQLite via a single `driver` key in config; zero-dependency PDO abstraction
 - ⏩ **Weekend skip** — cron skips Saturday/Sunday in each team's local timezone
 - 📅 **Pending standup widget** — unexpired unsubmitted tokens shown on the dashboard
-- 🧪 **PHPUnit test suite** — 55 integration tests via PHAR (no Composer needed to run)
+- 🧪 **PHPUnit test suite** — 78 integration tests via PHAR (no Composer needed to run)
 
 ---
 
@@ -33,8 +35,9 @@ Teams receive a daily standup prompt email, submit answers via a unique link, an
 
 | Requirement | Version / Notes |
 |---|---|
-| PHP | ≥ 8.1 — extensions: `pdo_mysql`, `openssl`, `mbstring` |
-| MySQL / MariaDB | MySQL ≥ 5.7 or MariaDB ≥ 10.3 |
+| PHP | ≥ 8.1 |
+| PHP extensions | `pdo_mysql` (MySQL), `pdo_pgsql` (PostgreSQL), `pdo_sqlite` (SQLite), `openssl`, `mbstring` |
+| Database | MySQL ≥ 5.7 / MariaDB ≥ 10.3, **or** PostgreSQL ≥ 13, **or** SQLite ≥ 3.35 |
 | Web server | Apache or Nginx; document root = `public/` |
 | SMTP relay | Plain TCP relay (no AUTH); must be localhost or private network |
 | Cron | System cron or supervisor; runs every minute |
@@ -77,10 +80,32 @@ return [
 
 ### 3. Database setup
 
+**MySQL (default):**
 ```bash
 mysql -u root -p -e "CREATE DATABASE asyncstandup CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 mysql -u root -p asyncstandup < db/schema.sql
 ```
+
+**PostgreSQL:**
+```bash
+psql -U postgres -c "CREATE DATABASE asyncstandup;"
+psql -U postgres asyncstandup < db/schema-postgresql.sql
+```
+Config:
+```php
+'db' => ['driver' => 'pgsql', 'host' => '127.0.0.1', 'port' => 5432,
+         'name' => 'asyncstandup', 'user' => 'appuser', 'pass' => 'secret'],
+```
+
+**SQLite:**
+```bash
+sqlite3 /var/data/asyncstandup.db < tests/schema-sqlite.sql
+```
+Config:
+```php
+'db' => ['driver' => 'sqlite', 'path' => '/var/data/asyncstandup.db'],
+```
+> Ensure the directory is writable by the web server user and not web-accessible.
 
 ### 4. Web server
 
@@ -145,12 +170,14 @@ Log in and use `/admin/users.php` to approve or reject subsequent registrations.
 |---|---|---|
 | `app_url` | Base URL (no trailing slash) | `https://standup.example.com` |
 | `app_name` | Application name shown in emails and UI | `AsyncStandUp` |
-| `db.host` | MySQL host | `127.0.0.1` |
-| `db.port` | MySQL port | `3306` |
-| `db.name` | Database name | `asyncstandup` |
-| `db.user` | Database user | `appuser` |
-| `db.pass` | Database password | — |
-| `db.charset` | Connection charset | `utf8mb4` |
+| `db.driver` | Database driver | `mysql` / `pgsql` / `sqlite` |
+| `db.host` | Host (MySQL / PostgreSQL only) | `127.0.0.1` |
+| `db.port` | Port (MySQL / PostgreSQL only) | `3306` / `5432` |
+| `db.name` | Database name (MySQL / PostgreSQL only) | `asyncstandup` |
+| `db.user` | Database user (MySQL / PostgreSQL only) | `appuser` |
+| `db.pass` | Database password (MySQL / PostgreSQL only) | — |
+| `db.charset` | Connection charset (MySQL only) | `utf8mb4` |
+| `db.path` | Absolute path to `.db` file (SQLite only) | `/var/data/asyncstandup.db` |
 | `smtp.host` | SMTP relay hostname | `localhost` |
 | `smtp.port` | SMTP port | `25` |
 | `smtp.from` | Sender email address | `standup@example.com` |
@@ -190,7 +217,7 @@ sha256sum tests/phpunit.phar
 php tests/phpunit.phar --configuration tests/phpunit.xml
 ```
 
-Tests use an in-memory SQLite database — no MySQL connection required. All 55 tests should pass with exit code 0.
+Tests use an in-memory SQLite database — no MySQL connection required. All 78 tests should pass with exit code 0.
 
 > `tests/phpunit.phar` is gitignored.
 
@@ -229,7 +256,7 @@ Then replace in `templates/layout.php`:
 
 - **Always use HTTPS** — session cookies and the API key (if configured) are transmitted in plain text over HTTP; TLS is mandatory for any public deployment
 - **SMTP relay must be localhost or private network** — the mailer uses a plain TCP socket with no authentication; expose it only on loopback or a VPN-restricted interface
-- **Rate-limit login and forgot-password** — no PHP-level rate limiting is implemented; add at the reverse proxy (nginx `limit_req_zone`) or WAF level
+- **Rate-limiting** — server-side login lockout: 5 failed attempts in 10 minutes locks the account for 5 minutes (tracked in `login_attempts` table). Password reset requests are rate-limited to 3 per 15 minutes per user. For additional protection add reverse-proxy rate limiting (nginx `limit_req_zone`).
 - **Session hardening** — cookies are set with `HttpOnly`, `SameSite=Lax`, and `Secure` (requires HTTPS); `use_strict_mode` is enabled
 - **CAPTCHA** — text-based CAPTCHA on login and registration reduces bot pressure; not a substitute for rate limiting
 - **`logs/` must not be web-accessible** — add `location /logs/ { deny all; }` (Nginx) or `Require all denied` (Apache `.htaccess`) to prevent log disclosure
@@ -250,6 +277,9 @@ When upgrading from an older version, run the ALTER TABLE statements listed in `
 | Approve existing users after migration | `UPDATE users SET account_status = 'approved' WHERE account_status = 'pending';` | US-17 |
 | Unsubscribe token on recipients | `ALTER TABLE team_recipients ADD COLUMN unsubscribe_token VARCHAR(64) NULL UNIQUE;` | US-20 |
 | Summary to all developers flag | `ALTER TABLE teams ADD COLUMN summary_to_all_developers TINYINT(1) NOT NULL DEFAULT 0;` | US-21 |
+| Configurable DB backend | No DB migration needed — `driver` key is new in config only | US-25 |
+| Team status column | `ALTER TABLE teams ADD COLUMN status VARCHAR(10) NOT NULL DEFAULT 'active';` | US-26 |
+| Deletion hardening | No schema change — `deleteTeam()` is now transaction-wrapped | US-27 |
 
 ---
 
@@ -258,7 +288,7 @@ When upgrading from an older version, run the ALTER TABLE statements listed in `
 ```
 config/          — configuration (only example committed)
 cron/            — CLI scripts for timed email delivery (run every minute)
-db/              — schema.sql (CREATE TABLE + ALTER TABLE migration history)
+db/              — schema.sql (MySQL), schema-postgresql.sql (PostgreSQL); SQLite schema at tests/schema-sqlite.sql
 logs/            — error logs (gitignored *.log)
 public/          — document root; all PHP pages served here
   admin/         — admin-only pages (requireAdmin() enforced)
