@@ -45,6 +45,9 @@ class BotWebhookTest extends TestCase
 
         $this->assertEquals(409, $code);
         $this->assertArrayHasKey('error', $body);
+
+        $count = (int) $this->pdo->query('SELECT COUNT(*) FROM standup_submissions')->fetchColumn();
+        $this->assertEquals(0, $count, 'No submission row should be created for an already-used token');
     }
 
     public function testHandleInvokeSavesAnswers(): void
@@ -64,6 +67,24 @@ class BotWebhookTest extends TestCase
 
         $count = (int) $this->pdo->query('SELECT COUNT(*) FROM standup_submissions')->fetchColumn();
         $this->assertEquals(1, $count);
+    }
+
+    public function testHandleConversationUpdateRejectsInvalidServiceUrl(): void
+    {
+        $activity = [
+            'type'         => 'conversationUpdate',
+            'membersAdded' => [['aadObjectId' => 'aad-123']],
+            'serviceUrl'   => 'http://evil.com/',
+            'conversation' => ['id' => 'conv-abc'],
+            'recipient'    => ['id' => 'bot-1'],
+            'channelId'    => 'msteams',
+        ];
+        $this->handler->handle($activity);
+
+        $row = $this->pdo->query('SELECT teams_conversation_ref FROM users WHERE id = 1')->fetch();
+        $ref = json_decode((string) ($row['teams_conversation_ref'] ?? 'null'), true);
+        $this->assertIsArray($ref, 'Conv ref should be stored even with invalid serviceUrl');
+        $this->assertNull($ref['serviceUrl'], 'Unvalidated serviceUrl must be stored as null');
     }
 
     public function testHandleConversationUpdateSavesConvRef(): void
