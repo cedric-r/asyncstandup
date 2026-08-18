@@ -22,10 +22,12 @@ $badges = [
 ob_start();
 ?>
 <div class="max-w-5xl mx-auto px-4 py-8">
-  <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold text-gray-900">Teams Integration — All Teams</h1>
-    <a href="/admin/users.php" class="text-sm text-gray-500 hover:underline">← Admin Users</a>
-  </div>
+  <p class="text-sm text-gray-500 mb-4">
+    <a href="/admin/users.php" class="text-indigo-600 hover:text-indigo-700">Admin</a>
+    <span class="mx-1 text-gray-400">&rsaquo;</span>
+    Teams Integration
+  </p>
+  <h1 class="text-2xl font-bold text-gray-900 mb-6">Teams Integration — All Teams</h1>
 
   <?php if (empty($teams)): ?>
     <p class="text-gray-500">No teams found.</p>
