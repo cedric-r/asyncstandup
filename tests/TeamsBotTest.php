@@ -62,4 +62,14 @@ class TeamsBotTest extends TestCase
 
         $this->assertFalse($result);
     }
+
+    public function testSendDmPromptReturnsFalseWithEmptyConvRef(): void
+    {
+        $pdo  = createTestPdo();
+        $user = ['id' => 1, 'teams_conversation_ref' => ''];
+
+        $result = sendDmPrompt($pdo, $user, $this->team, $this->questions, 'tok', []);
+
+        $this->assertFalse($result);
+    }
 }

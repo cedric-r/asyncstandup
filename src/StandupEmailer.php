@@ -106,7 +106,7 @@ function createStandupToken(PDO $pdo, int $teamId, int $userId, string $sendDate
 function getDeveloperMembers(PDO $pdo, int $teamId): array
 {
     $stmt = $pdo->prepare('
-        SELECT u.id, u.email, u.display_name
+        SELECT u.id, u.email, u.display_name, u.teams_conversation_ref
         FROM team_members tm
         JOIN users u ON u.id = tm.user_id
         WHERE tm.team_id = ? AND tm.is_developer = 1

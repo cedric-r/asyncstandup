@@ -211,7 +211,11 @@ function sendDmPrompt(
     ]]);
 
     $response = @file_get_contents($endpoint, false, $ctx);
-    $code     = 0;
+    if ($response === false) {
+        error_log("[AsyncStandUp] Bot DM network failure for user {$user['id']} team {$team['id']}");
+        return false;
+    }
+    $code = 0;
     /** @var string[] $http_response_header */
     foreach ($http_response_header as $h) {
         if (preg_match('#HTTP/\S+ (\d+)#', $h, $m)) {
