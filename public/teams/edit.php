@@ -37,11 +37,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ? max(1, min(7, (int) ($_POST['frequency_day'] ?? 1)))
                     : null;
 
+    $channel     = in_array($_POST['notification_channel'] ?? '', ['email', 'teams', 'teams-summary'], true)
+                   ? $_POST['notification_channel'] : 'email';
+    $webhookUrl  = trim($_POST['teams_webhook_url'] ?? '') ?: null;
+    $channelName = trim($_POST['teams_channel_name'] ?? '') ?: null;
+
     if (empty($errors)) {
-        updateTeam($pdo, $teamId, $name, $timezone, $standupTime . ':00', $summaryToAllDevelopers, $frequency, $frequencyDay);
-        setFlash('success', 'Team settings updated.');
-        header('Location: /teams/edit.php?id=' . $teamId);
-        exit;
+        $result = updateTeam($pdo, $teamId, $name, $timezone, $standupTime . ':00',
+                             $summaryToAllDevelopers, $frequency, $frequencyDay,
+                             $channel, $webhookUrl, $channelName);
+        if ($result === false) {
+            $errors[] = 'Invalid notification channel or missing/invalid webhook URL for Teams mode.';
+        } else {
+            setFlash('success', 'Team settings updated.');
+            header('Location: /teams/edit.php?id=' . $teamId);
+            exit;
+        }
     }
 }
 
@@ -118,6 +129,59 @@ ob_start();
       this.value === 'weekly' ? 'block' : 'none';
   });
   </script>
+  <?php
+  $currentChannel = $_POST['notification_channel'] ?? $team['notification_channel'] ?? 'email';
+  $teamsFieldsVisible = in_array($currentChannel, ['teams', 'teams-summary'], true);
+  ?>
+  <fieldset class="mt-6">
+    <legend class="text-sm font-medium text-gray-700 mb-2">Notification Channel</legend>
+    <div class="space-y-2">
+      <?php foreach (['email' => 'Email (default)', 'teams' => 'Teams DM + Channel Summary', 'teams-summary' => 'Teams Channel Summary only (no bot)'] as $val => $lbl): ?>
+      <label class="flex items-center gap-2 text-sm">
+        <input type="radio" name="notification_channel" value="<?= htmlspecialchars($val, ENT_QUOTES, 'UTF-8') ?>"
+               <?= $currentChannel === $val ? 'checked' : '' ?>>
+        <?= htmlspecialchars($lbl, ENT_QUOTES, 'UTF-8') ?>
+      </label>
+      <?php endforeach; ?>
+    </div>
+  </fieldset>
+
+  <div id="teams-fields" class="mt-4 space-y-4" style="display:<?= $teamsFieldsVisible ? '' : 'none' ?>">
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">
+        Incoming Webhook URL <span class="text-red-500">*</span>
+      </label>
+      <input type="url" name="teams_webhook_url" maxlength="500"
+             value="<?= htmlspecialchars($_POST['teams_webhook_url'] ?? $team['teams_webhook_url'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
+             placeholder="https://xxxxxxx.webhook.office.com/webhookb2/...">
+      <p class="text-xs text-gray-500 mt-1">Found in Teams → channel → Connectors → Incoming Webhook</p>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">
+        Channel name <span class="text-gray-400 font-normal">(display only)</span>
+      </label>
+      <input type="text" name="teams_channel_name" maxlength="100"
+             value="<?= htmlspecialchars($_POST['teams_channel_name'] ?? $team['teams_channel_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+             placeholder="e.g. #standup-alerts">
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    var fields = document.getElementById('teams-fields');
+    function update() {
+      var sel = document.querySelector('input[name="notification_channel"]:checked');
+      fields.style.display = (sel && (sel.value === 'teams' || sel.value === 'teams-summary')) ? '' : 'none';
+    }
+    document.querySelectorAll('input[name="notification_channel"]').forEach(function (r) {
+      r.addEventListener('change', update);
+    });
+    update();
+  }());
+  </script>
+
   <button type="submit" class="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm">Save</button>
 </form>
 </div>

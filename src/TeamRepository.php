@@ -63,22 +63,64 @@ function createTeam(PDO $pdo, int $orgId, string $name, string $timezone, string
     return $teamId;
 }
 
+/**
+ * Update mutable team settings.
+ *
+ * Returns the updated team row on success, or false if validation fails:
+ * - notification_channel must be 'email', 'teams', or 'teams-summary'
+ * - teams or teams-summary mode requires a valid HTTPS teams_webhook_url
+ *
+ * @return array<string, mixed>|false
+ */
 function updateTeam(
-    PDO $pdo,
-    int $teamId,
-    string $name,
-    string $timezone,
-    string $standupTime,
-    int $summaryToAllDevelopers = 0,
-    string $frequency = 'daily',
-    ?int $frequencyDay = null
-): void {
+    PDO     $pdo,
+    int     $teamId,
+    string  $name,
+    string  $timezone,
+    string  $standupTime,
+    int     $summaryToAllDevelopers   = 0,
+    string  $frequency                = 'daily',
+    ?int    $frequencyDay             = null,
+    string  $notificationChannel      = 'email',
+    ?string $teamsWebhookUrl          = null,
+    ?string $teamsChannelName         = null
+): array|false {
+    $validChannels = ['email', 'teams', 'teams-summary'];
+    if (!in_array($notificationChannel, $validChannels, true)) {
+        return false;
+    }
+
+    if (in_array($notificationChannel, ['teams', 'teams-summary'], true)) {
+        $url = trim((string) $teamsWebhookUrl);
+        if ($url === ''
+            || filter_var($url, FILTER_VALIDATE_URL) === false
+            || !str_starts_with($url, 'https://')
+        ) {
+            return false;
+        }
+        $teamsWebhookUrl = $url;
+    } else {
+        $teamsWebhookUrl = null;
+    }
+
+    $teamsChannelName = $teamsChannelName !== null
+        ? mb_substr(trim($teamsChannelName), 0, 100)
+        : null;
+
     $pdo->prepare(
-        'UPDATE teams SET name = ?, timezone = ?, standup_time = ?,
-         summary_to_all_developers = ?, frequency = ?, frequency_day = ?
+        'UPDATE teams SET
+             name = ?, timezone = ?, standup_time = ?,
+             summary_to_all_developers = ?, frequency = ?, frequency_day = ?,
+             notification_channel = ?, teams_webhook_url = ?, teams_channel_name = ?
          WHERE id = ?'
-    )->execute([trim($name), $timezone, $standupTime, $summaryToAllDevelopers,
-                $frequency, $frequencyDay, $teamId]);
+    )->execute([
+        trim($name), $timezone, $standupTime,
+        $summaryToAllDevelopers, $frequency, $frequencyDay,
+        $notificationChannel, $teamsWebhookUrl, $teamsChannelName,
+        $teamId,
+    ]);
+
+    return getTeamById($pdo, $teamId) ?? false;
 }
 
 function suspendTeam(PDO $pdo, int $teamId): void

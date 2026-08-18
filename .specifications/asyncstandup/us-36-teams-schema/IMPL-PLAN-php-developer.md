@@ -1,6 +1,6 @@
 # IMPL-PLAN — US-36: Teams Schema & Per-Team Mode Selector
 
-**Status**: PENDING GATE C APPROVAL
+**Status**: APPROVED
 **Branch**: `feature/us-36-teams-schema`
 **Agent**: PHP Developer (`fa2e6dbf`)
 **Story**: US-36 — Teams Schema & Per-Team Mode Selector

@@ -239,3 +239,13 @@ CREATE TABLE IF NOT EXISTS api_request_log (
 -- US-35: API key management — rename label → name, add soft-delete column
 ALTER TABLE api_keys CHANGE COLUMN label name VARCHAR(100) NOT NULL DEFAULT '';
 ALTER TABLE api_keys ADD COLUMN revoked_at DATETIME NULL;
+
+-- US-36: MS Teams integration — teams columns
+ALTER TABLE teams ADD COLUMN notification_channel   VARCHAR(10)  NOT NULL DEFAULT 'email';
+ALTER TABLE teams ADD COLUMN teams_webhook_url      VARCHAR(500) NULL;
+ALTER TABLE teams ADD COLUMN teams_channel_name     VARCHAR(100) NULL;
+ALTER TABLE teams ADD COLUMN teams_conversation_ref TEXT         NULL;
+
+-- US-36: MS Teams integration — users columns
+ALTER TABLE users ADD COLUMN teams_aad_id           VARCHAR(100) NULL;
+ALTER TABLE users ADD COLUMN teams_conversation_ref TEXT         NULL;
