@@ -230,3 +230,54 @@ function sendDmPrompt(
 
     return true;
 }
+
+/**
+ * Validate an incoming Bot Framework JWT (audience, issuer, expiry).
+ *
+ * ⚠️ Legacy-risk: RS256 signature verification against Microsoft's JWKS endpoint is NOT
+ * performed in v1. Acceptable for dev/staging. Production deployments MUST add signature
+ * verification before go-live.
+ * TODO(security): fetch JWKS from https://login.botframework.com/v1/.well-known/openidconfiguration
+ *                 and verify RSA signature before deploying to production.
+ *
+ * @param array<string, string> $botConfig  Must contain 'app_id'.
+ */
+function validateBotJwt(string $authHeader, array $botConfig): bool
+{
+    if (!str_starts_with($authHeader, 'Bearer ')) {
+        return false;
+    }
+    $jwt = substr($authHeader, 7);
+
+    $parts = explode('.', $jwt);
+    if (count($parts) !== 3) {
+        return false;
+    }
+
+    // Base64url decode the payload segment.
+    $padded  = str_pad(strtr($parts[1], '-_', '+/'), (4 - strlen($parts[1]) % 4) % 4, '=', STR_PAD_RIGHT);
+    $payload = json_decode(base64_decode($padded), true);
+    if (!is_array($payload)) {
+        return false;
+    }
+
+    // Audience must be our Bot AppId.
+    $aud = (string) ($payload['aud'] ?? '');
+    if ($aud !== ($botConfig['app_id'] ?? '')) {
+        return false;
+    }
+
+    // Issuer must be Bot Framework or Azure AD.
+    $iss = (string) ($payload['iss'] ?? '');
+    if (!str_contains($iss, 'botframework.com') && !str_contains($iss, 'microsoftonline.com')) {
+        return false;
+    }
+
+    // Token must not be expired.
+    $exp = (int) ($payload['exp'] ?? 0);
+    if ($exp < time()) {
+        return false;
+    }
+
+    return true;
+}
