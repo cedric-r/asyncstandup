@@ -1,4 +1,6 @@
-# AsyncStandUp
+<p align="center">
+  <img src="docs/logo.png" alt="AsyncStandUp" width="400" />
+</p>
 
 ![PHP 8.3](https://img.shields.io/badge/PHP-8.3-8892BF?logo=php&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)

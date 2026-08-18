@@ -16,7 +16,9 @@
 
       <!-- Logo + main links -->
       <div class="flex items-center gap-6">
-        <a href="<?= isset($currentUser) ? '/dashboard.php' : '/login.php' ?>" class="font-bold text-indigo-600 text-lg tracking-tight">AsyncStandUp</a>
+        <a href="<?= isset($currentUser) ? '/dashboard.php' : '/login.php' ?>" class="flex items-center gap-2">
+          <img src="/assets/logo.png" alt="AsyncStandUp" class="h-9 w-auto" />
+        </a>
         <?php if (isset($currentUser)): ?>
         <a href="/orgs/index.php" class="text-sm text-gray-600 hover:text-indigo-600">Organisations</a>
         <?php endif; ?>
