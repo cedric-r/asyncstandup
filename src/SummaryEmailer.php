@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/TeamsMessageBuilder.php';
+require_once __DIR__ . '/TeamsNotifier.php';
+
 /**
  * Return true if team's summary time (standup_time + 1 hour) is within 60 s of nowUtc.
  */
@@ -263,6 +266,59 @@ function sendSummaryEmail(PDO $pdo, array $config, array $team, string $sendDate
             $nonSubmitters[] = $dev['display_name'] ?? $dev['email'];
         }
     }
+
+    // -----------------------------------------------------------------
+    // US-37: Teams channel posting (parallel member list — does NOT
+    // modify $submitterData / $nonSubmitters used by the email path).
+    // -----------------------------------------------------------------
+    $membersForCard = [];
+    foreach ($developers as $dev) {
+        $devId = (int) $dev['id'];
+        if (isset($answerMap[$devId])) {
+            $cardAnswers = [];
+            foreach ($questions as $q) {
+                $cardAnswers[] = [
+                    'question'   => (string) $q['question'],
+                    'answer'     => $answerMap[$devId][(int) $q['id']] ?? '',
+                    'is_blocker' => (int) $q['is_blocker'],
+                ];
+            }
+            $membersForCard[] = [
+                'display_name' => $dev['display_name'] ?? $dev['email'],
+                'submitted'    => true,
+                'submitted_at' => null,
+                'answers'      => $cardAnswers,
+            ];
+        } else {
+            $membersForCard[] = [
+                'display_name' => $dev['display_name'] ?? $dev['email'],
+                'submitted'    => false,
+                'answers'      => [],
+            ];
+        }
+    }
+    $respondedCount  = count(array_filter($membersForCard, static fn($m) => $m['submitted']));
+    $totalCount      = count($membersForCard);
+    $summaryCardData = [
+        'team'             => $team,
+        'date'             => $sendDate,
+        'members'          => $membersForCard,
+        'participation_pct'=> $totalCount > 0 ? (int) round($respondedCount / $totalCount * 100) : 0,
+        'avg_mood'         => null,
+    ];
+
+    $channel = (string) ($team['notification_channel'] ?? 'email');
+    if (in_array($channel, ['teams', 'teams-summary'], true) && !empty($team['teams_webhook_url'])) {
+        $card    = buildSummaryCard($summaryCardData);
+        $success = postChannelSummary((string) $team['teams_webhook_url'], $card);
+        if (!$success) {
+            error_log("[AsyncStandUp] Teams webhook failed for team {$teamId} — falling back to email");
+            // Fall through to email sending below.
+        } else {
+            return; // Teams posting succeeded — no email needed.
+        }
+    }
+    // -----------------------------------------------------------------
 
     $subject  = "AsyncStandUp Summary — {$teamName} ({$sendDate})";
     $appUrl   = rtrim($config['app_url'] ?? '', '/');
