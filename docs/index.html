@@ -395,7 +395,7 @@
       <tr><td>SMTP</td><td>Any SMTP server</td><td>Required for email prompts and summaries</td></tr>
       <tr><td>Web server</td><td>Apache / nginx / PHP built-in</td><td>mod_rewrite for API + bot webhook clean URLs</td></tr>
       <tr><td>HTTPS</td><td>Optional for email mode; required for Teams bot DMs</td><td>Let's Encrypt is free</td></tr>
-      <tr><td>Cron</td><td>crontab access</td><td>3 scheduled passes per day</td></tr>
+      <tr><td>Cron</td><td>crontab access</td><td>2 jobs, each run every minute</td></tr>
     </table>
   </section>
 
@@ -426,13 +426,9 @@ mysql -u root -p asyncstandup < db/schema.sql
 psql -U postgres asyncstandup < db/schema-postgresql.sql</code></pre>
 
     <h3>4. Set up cron jobs</h3>
-    <pre><code># /etc/crontab — adjust paths and times to your timezone
-# Send standup prompts
-30 9  * * *  www-data  php /var/www/asyncstandup/cron/send_standups.php
-# Send submission reminders
-00 11 * * *  www-data  php /var/www/asyncstandup/cron/send_standups.php reminder
-# Send daily summaries
-30 16 * * *  www-data  php /var/www/asyncstandup/cron/send_summaries.php</code></pre>
+    <pre><code># Run every minute — each script checks per-team time + timezone on every run
+* * * * *  www-data  php /var/www/asyncstandup/cron/send_standups.php  >> /var/log/asyncstandup.log 2>&amp;1
+* * * * *  www-data  php /var/www/asyncstandup/cron/send_summaries.php >> /var/log/asyncstandup.log 2>&amp;1</code></pre>
 
     <h3>5. Run locally (for testing)</h3>
     <pre><code>php -S localhost:8080 -t public/
@@ -560,9 +556,7 @@ return [
 
   <section id="reminders">
     <h2>Submission Reminders</h2>
-    <p>Run the second cron pass to send reminders to members who haven't submitted yet. The reminder uses the same standup token — clicking the reminder link opens the same submission form.</p>
-    <pre><code># Second cron pass (e.g. 2 hours after prompts)
-php /path/to/asyncstandup/cron/send_standups.php reminder</code></pre>
+    <p>Reminders are handled automatically by <code>send_standups.php</code> on every run — members who have not submitted by the configured reminder window receive a nudge using their existing token. No separate cron entry needed.</p>
   </section>
 
   <section id="frequency">
@@ -795,29 +789,24 @@ php /path/to/asyncstandup/cron/send_standups.php reminder</code></pre>
   <!-- CRON -->
   <section id="cron">
     <h2>Cron Jobs</h2>
+    <p>Both scripts run every minute. Each team has its own standup time and timezone configured in Team Settings. Deduplication guards prevent double-sending.</p>
     <table>
-      <tr><th>Script</th><th>Purpose</th><th>Suggested time</th></tr>
+      <tr><th>Script</th><th>Purpose</th><th>Schedule</th></tr>
       <tr>
         <td><code>cron/send_standups.php</code></td>
-        <td>Send standup prompt to each active developer</td>
-        <td>09:00 (per team timezone)</td>
-      </tr>
-      <tr>
-        <td><code>cron/send_standups.php reminder</code></td>
-        <td>Send reminder to members who haven't submitted</td>
-        <td>11:00</td>
+        <td>Standup prompts + reminders (per-team timezone check)</td>
+        <td><code>* * * * *</code></td>
       </tr>
       <tr>
         <td><code>cron/send_summaries.php</code></td>
-        <td>Send daily summary email or Teams card</td>
-        <td>16:30</td>
+        <td>Daily summaries (per-team summary time check)</td>
+        <td><code>* * * * *</code></td>
       </tr>
     </table>
 
-    <pre><code># Example crontab (all times in UTC; adjust for your timezone)
-0  9  * * 1-5  www-data  php /var/www/asyncstandup/cron/send_standups.php
-0  11 * * 1-5  www-data  php /var/www/asyncstandup/cron/send_standups.php reminder
-30 16 * * 1-5  www-data  php /var/www/asyncstandup/cron/send_summaries.php</code></pre>
+    <pre><code># /etc/crontab
+* * * * *  www-data  php /var/www/asyncstandup/cron/send_standups.php  >> /var/log/asyncstandup.log 2>&amp;1
+* * * * *  www-data  php /var/www/asyncstandup/cron/send_summaries.php >> /var/log/asyncstandup.log 2>&amp;1</code></pre>
 
     <div class="callout info">
       <div class="callout-icon">ℹ️</div>
