@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AsyncStandUp — Documentation</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --indigo: #4f46e5;
+      --indigo-light: #e0e7ff;
+      --indigo-dark: #3730a3;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-900: #111827;
+      --green: #16a34a;
+      --green-light: #dcfce7;
+      --amber: #d97706;
+      --amber-light: #fef3c7;
+      --red: #dc2626;
+      --red-light: #fee2e2;
+      --blue: #2563eb;
+      --blue-light: #dbeafe;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--gray-700);
+      background: var(--gray-50);
+    }
+
+    /* ─── SIDEBAR + LAYOUT ─── */
+    .layout { display: flex; min-height: 100vh; }
+
+    nav.sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      background: white;
+      border-right: 1px solid var(--gray-200);
+      padding: 2rem 1.5rem;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .sidebar-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+      text-decoration: none;
+    }
+    .sidebar-logo .logo-icon {
+      width: 36px; height: 36px;
+      background: var(--indigo);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 18px;
+    }
+    .sidebar-logo .logo-text {
+      font-weight: 700; font-size: 1.1rem; color: var(--gray-900);
+    }
+
+    .nav-section { margin-bottom: 1.5rem; }
+    .nav-section-title {
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--gray-600); margin-bottom: 0.5rem;
+    }
+    .nav-section a {
+      display: block; padding: 0.3rem 0.5rem; margin: 0.1rem 0;
+      text-decoration: none; color: var(--gray-700); font-size: 0.9rem;
+      border-radius: 6px; transition: background 0.15s;
+    }
+    .nav-section a:hover { background: var(--gray-100); color: var(--indigo); }
+
+    main.content { flex: 1; padding: 3rem 4rem; max-width: 1000px; }
+
+    /* ─── TYPOGRAPHY ─── */
+    h1 { font-size: 2.5rem; font-weight: 800; color: var(--gray-900); margin-bottom: 0.5rem; }
+    h2 { font-size: 1.75rem; font-weight: 700; color: var(--gray-900); margin: 3rem 0 1rem; padding-top: 1rem; border-top: 1px solid var(--gray-200); }
+    h3 { font-size: 1.2rem; font-weight: 600; color: var(--gray-900); margin: 2rem 0 0.75rem; }
+    p { margin-bottom: 1rem; }
+    ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+    li { margin-bottom: 0.35rem; }
+    a { color: var(--indigo); }
+    code {
+      background: var(--gray-100); border: 1px solid var(--gray-200);
+      border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.875em;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    }
+    pre {
+      background: var(--gray-900); color: #e2e8f0;
+      border-radius: 10px; padding: 1.25rem 1.5rem;
+      overflow-x: auto; margin: 1rem 0;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.875rem; line-height: 1.7;
+    }
+    pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+
+    /* ─── HERO ─── */
+    .hero {
+      background: linear-gradient(135deg, var(--indigo) 0%, var(--indigo-dark) 100%);
+      color: white; border-radius: 16px; padding: 3rem; margin-bottom: 3rem;
+    }
+    .hero h1 { color: white; font-size: 2.8rem; }
+    .hero p { color: rgba(255,255,255,0.85); font-size: 1.15rem; max-width: 600px; }
+    .badges { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1.5rem; }
+    .badge {
+      padding: 0.3rem 0.75rem; border-radius: 20px; font-size: 0.8rem;
+      font-weight: 600; background: rgba(255,255,255,0.2); color: white;
+    }
+
+    /* ─── FEATURE GRID ─── */
+    .feature-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem; margin: 1.5rem 0;
+    }
+    .feature-card {
+      background: white; border: 1px solid var(--gray-200); border-radius: 12px;
+      padding: 1.25rem; display: flex; gap: 0.75rem; align-items: flex-start;
+    }
+    .feature-icon { font-size: 1.5rem; flex-shrink: 0; }
+    .feature-card strong { display: block; color: var(--gray-900); margin-bottom: 0.2rem; }
+    .feature-card span { font-size: 0.875rem; color: var(--gray-600); }
+
+    /* ─── SCREENSHOTS ─── */
+    .screenshot-section { margin: 2rem 0; }
+    .screenshot-section img {
+      width: 100%; border-radius: 12px;
+      border: 1px solid var(--gray-200);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    .screenshot-caption {
+      text-align: center; font-size: 0.85rem; color: var(--gray-600);
+      margin-top: 0.75rem; font-style: italic;
+    }
+
+    /* ─── TABLES ─── */
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+    th {
+      background: var(--gray-100); text-align: left;
+      padding: 0.6rem 1rem; font-weight: 600; color: var(--gray-900);
+      border-bottom: 2px solid var(--gray-200);
+    }
+    td { padding: 0.6rem 1rem; border-bottom: 1px solid var(--gray-100); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--gray-50); }
+
+    /* ─── CALLOUTS ─── */
+    .callout {
+      border-radius: 10px; padding: 1rem 1.25rem; margin: 1rem 0;
+      display: flex; gap: 0.75rem; align-items: flex-start;
+    }
+    .callout-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 0.1rem; }
+    .callout.info { background: var(--blue-light); border-left: 4px solid var(--blue); }
+    .callout.warning { background: var(--amber-light); border-left: 4px solid var(--amber); }
+    .callout.success { background: var(--green-light); border-left: 4px solid var(--green); }
+    .callout.danger { background: var(--red-light); border-left: 4px solid var(--red); }
+    .callout strong { display: block; margin-bottom: 0.25rem; }
+
+    /* ─── MODE TABLE ─── */
+    .mode-table { margin: 1.5rem 0; }
+    .mode-badge {
+      display: inline-block; padding: 0.2rem 0.6rem; border-radius: 4px;
+      font-size: 0.75rem; font-weight: 700; font-family: monospace;
+    }
+    .mode-badge.email { background: var(--gray-100); color: var(--gray-700); }
+    .mode-badge.teams { background: var(--blue-light); color: var(--blue); }
+    .mode-badge.teams-summary { background: var(--indigo-light); color: var(--indigo); }
+
+    /* ─── ENDPOINT BLOCKS ─── */
+    .endpoint {
+      background: white; border: 1px solid var(--gray-200); border-radius: 10px;
+      margin: 1rem 0; overflow: hidden;
+    }
+    .endpoint-header {
+      padding: 0.75rem 1rem; display: flex; gap: 0.75rem; align-items: center;
+      border-bottom: 1px solid var(--gray-200); background: var(--gray-50);
+    }
+    .method {
+      padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem;
+      font-weight: 700; font-family: monospace;
+    }
+    .method.get { background: var(--green-light); color: var(--green); }
+    .method.post { background: var(--blue-light); color: var(--blue); }
+    .endpoint-path { font-family: monospace; font-size: 0.9rem; color: var(--gray-900); }
+    .endpoint-desc { color: var(--gray-600); font-size: 0.875rem; margin-left: auto; }
+    .endpoint-body { padding: 1rem; }
+
+    /* ─── TOOL CARDS ─── */
+    .tool-list { margin: 1rem 0; }
+    .tool-item {
+      display: flex; gap: 1rem; align-items: flex-start;
+      padding: 0.75rem; border-radius: 8px; margin-bottom: 0.5rem;
+      background: white; border: 1px solid var(--gray-200);
+    }
+    .tool-name { font-family: monospace; font-weight: 600; color: var(--indigo); min-width: 160px; }
+    .tool-desc { font-size: 0.875rem; color: var(--gray-600); }
+
+    footer {
+      border-top: 1px solid var(--gray-200); padding: 2rem 4rem;
+      color: var(--gray-600); font-size: 0.875rem; text-align: center;
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <a href="#" class="sidebar-logo">
+    <div class="logo-icon">⏰</div>
+    <div class="logo-text">AsyncStandUp</div>
+  </a>
+
+  <div class="nav-section">
+    <div class="nav-section-title">Getting Started</div>
+    <a href="#overview">Overview</a>
+    <a href="#features">Features</a>
+    <a href="#requirements">Requirements</a>
+    <a href="#installation">Installation</a>
+    <a href="#configuration">Configuration</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-title">Using the App</div>
+    <a href="#organisations">Organisations</a>
+    <a href="#teams">Teams</a>
+    <a href="#questions">Questions</a>
+    <a href="#submissions">Submitting Standups</a>
+    <a href="#responses">Response Browser</a>
+    <a href="#dashboard">Dashboard</a>
+    <a href="#mood">Mood Tracking</a>
+    <a href="#blockers">Blocker Flagging</a>
+    <a href="#reminders">Reminders</a>
+    <a href="#frequency">Frequency</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-title">Integrations</div>
+    <a href="#teams-integration">MS Teams</a>
+    <a href="#api">REST API</a>
+    <a href="#mcp">MCP Server</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-title">Administration</div>
+    <a href="#admin">Admin Panel</a>
+    <a href="#api-keys">API Key Management</a>
+    <a href="#cron">Cron Jobs</a>
+    <a href="#database">Database</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-title">Reference</div>
+    <a href="#security">Security Notes</a>
+    <a href="#testing">Test Suite</a>
+    <a href="#changelog">What Was Built</a>
+  </div>
+</nav>
+
+<!-- MAIN CONTENT -->
+<main class="content">
+
+  <!-- HERO -->
+  <div class="hero">
+    <h1>⏰ AsyncStandUp</h1>
+    <p>A self-hosted async standup tool for distributed teams — no Slack, no Azure, no subscriptions. Just PHP, a database, and your own server.</p>
+    <div class="badges">
+      <span class="badge">PHP 8.3+</span>
+      <span class="badge">SQLite / MySQL / PostgreSQL</span>
+      <span class="badge">127 tests</span>
+      <span class="badge">PHPStan level 5</span>
+      <span class="badge">MIT License</span>
+    </div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <section id="overview">
+    <h2>Overview</h2>
+    <p>AsyncStandUp replaces synchronous stand-up meetings with a scheduled async workflow. Each morning, the application emails (or Teams-messages) every developer with a set of team-specific questions. Developers respond via a web form or directly in a Teams Adaptive Card. The application collects all responses, flags blockers, tracks mood, and sends a daily summary to the team.</p>
+    <p>Everything runs from a single PHP application. No cloud vendor lock-in. No monthly subscriptions. The only external dependencies are an SMTP server and — optionally — a Microsoft Teams webhook or bot registration.</p>
+
+    <div class="screenshot-section">
+      <img src="screenshots/02-dashboard.png" alt="AsyncStandUp Dashboard" />
+      <p class="screenshot-caption">The main dashboard shows all teams, today's participation status, and quick actions.</p>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <h2>Features</h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🏢</div>
+        <div>
+          <strong>Multi-org, multi-team</strong>
+          <span>Organisations contain teams; teams have members, questions, and schedules.</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📅</div>
+        <div>
+          <strong>Configurable frequency</strong>
+          <span>Daily, weekdays only, or weekly on a chosen day.</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⏰</div>
+        <div>
+          <strong>Per-team timezone &amp; schedule</strong>
+          <span>Standup time and summary time set independently per team.</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔔</div>
+        <div>
+          <strong>Submission reminders</strong>
+          <span>Automatic reminder to members who haven't responded by a threshold time.</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚠️</div>
+        <div>
+          <strong>Blocker flagging</strong>
+          <span>One question per team marked as a blocker question — prefixed in summaries.</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">😊</div>
+        <div>
+          <strong>Mood / sentiment tracking</strong>
+          <span>5-level mood score per submission; 30-day trend on the dashboard.</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">💬</div>
+        <div>
+          <strong>MS Teams integration</strong>
+          <span>DM prompts with inline answer cards, channel summaries, 3 modes.</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔌</div>
+        <div>
+          <strong>Public REST API</strong>
+          <span>API key auth, rate-limited, 5 endpoints for reading and submitting standups.</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🤖</div>
+        <div>
+          <strong>MCP Server</strong>
+          <span>stdio JSON-RPC 2.0 — connect directly from Claude Desktop or Pi SDK.</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🗝️</div>
+        <div>
+          <strong>API key management</strong>
+          <span>Generate, list, revoke API keys from the settings UI. Soft-delete with audit trail.</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <div>
+          <strong>Invitation-based membership</strong>
+          <span>Team owners invite members via email. Admin approves registrations.</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🗄️</div>
+        <div>
+          <strong>Multi-database support</strong>
+          <span>SQLite for simple deployments, MySQL or PostgreSQL for production scale.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REQUIREMENTS -->
+  <section id="requirements">
+    <h2>Requirements</h2>
+    <table>
+      <tr><th>Component</th><th>Minimum</th><th>Notes</th></tr>
+      <tr><td>PHP</td><td>8.3</td><td>PDO, mbstring, openssl, json extensions required</td></tr>
+      <tr><td>Database</td><td>SQLite 3 / MySQL 5.7+ / PostgreSQL 13+</td><td>SQLite is zero-config for small teams</td></tr>
+      <tr><td>SMTP</td><td>Any SMTP server</td><td>Required for email prompts and summaries</td></tr>
+      <tr><td>Web server</td><td>Apache / nginx / PHP built-in</td><td>mod_rewrite for API + bot webhook clean URLs</td></tr>
+      <tr><td>HTTPS</td><td>Optional for email mode; required for Teams bot DMs</td><td>Let's Encrypt is free</td></tr>
+      <tr><td>Cron</td><td>crontab access</td><td>3 scheduled passes per day</td></tr>
+    </table>
+  </section>
+
+  <!-- INSTALLATION -->
+  <section id="installation">
+    <h2>Installation</h2>
+
+    <h3>1. Clone the repository</h3>
+    <pre><code>git clone https://github.com/cedric-r/asyncstandup.git
+cd asyncstandup</code></pre>
+
+    <h3>2. Configure the application</h3>
+    <pre><code>cp config/config.example.php config/config.php
+# Edit config/config.php with your database, SMTP, and app settings</code></pre>
+
+    <h3>3. Create the database</h3>
+    <p><strong>SQLite (simplest):</strong></p>
+    <pre><code># Ensure the data/ directory is writable
+mkdir -p data
+chmod 750 data
+# Schema is applied automatically on first run, or run manually:
+php -r "require 'src/Db.php'; getDb(require 'config/config.php');"</code></pre>
+
+    <p><strong>MySQL / PostgreSQL:</strong></p>
+    <pre><code># Create the database, then apply the schema:
+mysql -u root -p asyncstandup < db/schema.sql
+# or
+psql -U postgres asyncstandup < db/schema-postgresql.sql</code></pre>
+
+    <h3>4. Set up cron jobs</h3>
+    <pre><code># /etc/crontab — adjust paths and times to your timezone
+# Send standup prompts
+30 9  * * *  www-data  php /var/www/asyncstandup/cron/send_standups.php
+# Send submission reminders
+00 11 * * *  www-data  php /var/www/asyncstandup/cron/send_standups.php reminder
+# Send daily summaries
+30 16 * * *  www-data  php /var/www/asyncstandup/cron/send_summaries.php</code></pre>
+
+    <h3>5. Run locally (for testing)</h3>
+    <pre><code>php -S localhost:8080 -t public/
+# Open http://localhost:8080</code></pre>
+  </section>
+
+  <!-- CONFIGURATION -->
+  <section id="configuration">
+    <h2>Configuration</h2>
+    <p>All configuration lives in <code>config/config.php</code>. Copy from <code>config/config.example.php</code> and edit:</p>
+    <pre><code>&lt;?php
+return [
+    // ── Database ──────────────────────────────────────────────
+    'db' => [
+        'driver'   => 'sqlite',        // 'sqlite' | 'mysql' | 'pgsql'
+        'path'     => __DIR__ . '/../data/asyncstandup.db',  // SQLite only
+        'host'     => 'localhost',     // MySQL/PostgreSQL
+        'port'     => 3306,
+        'name'     => 'asyncstandup',
+        'user'     => 'dbuser',
+        'password' => 'secret',
+    ],
+
+    // ── SMTP ──────────────────────────────────────────────────
+    'smtp' => [
+        'host'       => 'smtp.example.com',
+        'port'       => 587,
+        'encryption' => 'tls',         // 'tls' | 'ssl' | ''
+        'username'   => 'user@example.com',
+        'password'   => 'smtp-password',
+        'from_email' => 'standup@example.com',
+        'from_name'  => 'AsyncStandUp',
+    ],
+
+    // ── Application ───────────────────────────────────────────
+    'app' => [
+        'url'      => 'https://standup.example.com',
+        'timezone' => 'Europe/Paris',
+        'debug'    => false,
+    ],
+
+    // ── MS Teams Bot (optional) ───────────────────────────────
+    'teams_bot' => [
+        'app_id'           => 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+        'app_secret'       => 'your-bot-app-secret',
+        'service_url'      => 'https://smba.trafficmanager.net/emea/',
+        'bot_webhook_path' => '/bot/webhook',
+    ],
+];</code></pre>
+  </section>
+
+  <!-- TEAMS / QUESTIONS -->
+  <section id="organisations">
+    <h2>Organisations &amp; Teams</h2>
+    <p>The hierarchy is: <strong>Organisation → Team → Members → Questions</strong>. An admin creates an organisation, then creates teams within it. Team owners manage their own members and questions.</p>
+  </section>
+
+  <section id="teams">
+    <h3>Team Settings</h3>
+    <div class="screenshot-section">
+      <img src="screenshots/07-team-settings-teams.png" alt="Team Settings — MS Teams mode selector" />
+      <p class="screenshot-caption">Team edit page showing the notification mode selector with Teams configuration fields.</p>
+    </div>
+  </section>
+
+  <section id="questions">
+    <h2>Questions</h2>
+    <p>Each team defines its own standup questions. Questions are ordered (drag to reorder), and each can be flagged as a <strong>blocker question</strong> (⚠️) or a <strong>mood question</strong> (😊). Only one blocker and one mood question per team.</p>
+
+    <div class="screenshot-section">
+      <img src="screenshots/05-questions.png" alt="Team Questions page" />
+      <p class="screenshot-caption">Question management — toggle blocker and mood flags per question.</p>
+    </div>
+  </section>
+
+  <section id="submissions">
+    <h2>Submitting Standups</h2>
+    <p>Developers receive a prompt each morning (email or Teams DM). They click the link and fill in their standup on a simple form. Each token is single-use and expires after the team's standup window.</p>
+    <p>If the team uses <strong>Teams DM mode</strong>, the Adaptive Card has inline text inputs — answers are submitted without leaving Teams.</p>
+  </section>
+
+  <section id="responses">
+    <h2>Response Browser</h2>
+    <div class="screenshot-section">
+      <img src="screenshots/06-responses.png" alt="Response Browser" />
+      <p class="screenshot-caption">Browse all standup responses — filter by date, member, or team. Blocker answers are highlighted in red.</p>
+    </div>
+  </section>
+
+  <section id="dashboard">
+    <h2>Team Dashboard</h2>
+    <div class="screenshot-section">
+      <img src="screenshots/03-team-dashboard.png" alt="Team Dashboard — Engineering" />
+      <p class="screenshot-caption">Engineering team dashboard showing today's submissions, participation history, and mood trend.</p>
+    </div>
+
+    <div class="screenshot-section">
+      <img src="screenshots/04-design-dashboard-mood.png" alt="Team Dashboard with Mood Tracking" />
+      <p class="screenshot-caption">Dashboard with 30-day mood tracking. The weekly dip on Wednesdays and peak on Fridays is clearly visible.</p>
+    </div>
+  </section>
+
+  <section id="mood">
+    <h2>Mood Tracking</h2>
+    <p>Enable mood tracking by marking one question as the mood question (😊 toggle on the Questions page). Developers answer with a number 1–5 in free text (e.g. "4 — feeling good!"). The application extracts the score automatically.</p>
+    <ul>
+      <li><strong>1</strong> — Not great</li>
+      <li><strong>2</strong> — Below average</li>
+      <li><strong>3</strong> — Okay</li>
+      <li><strong>4</strong> — Good</li>
+      <li><strong>5</strong> — Excellent</li>
+    </ul>
+    <p>The 30-day trend chart on the dashboard and the average score in daily summaries both draw from these scores.</p>
+  </section>
+
+  <section id="blockers">
+    <h2>Blocker Flagging</h2>
+    <p>Mark one question as the blocker question (⚠️ toggle). Non-empty answers to this question are:</p>
+    <ul>
+      <li>Highlighted in red in the response browser</li>
+      <li>Prefixed with ⚠️ in email and Teams summaries</li>
+      <li>Shown with a "BLOCKER" badge in the daily summary email</li>
+    </ul>
+  </section>
+
+  <section id="reminders">
+    <h2>Submission Reminders</h2>
+    <p>Run the second cron pass to send reminders to members who haven't submitted yet. The reminder uses the same standup token — clicking the reminder link opens the same submission form.</p>
+    <pre><code># Second cron pass (e.g. 2 hours after prompts)
+php /path/to/asyncstandup/cron/send_standups.php reminder</code></pre>
+  </section>
+
+  <section id="frequency">
+    <h2>Configurable Frequency</h2>
+    <table>
+      <tr><th>Mode</th><th>Behaviour</th></tr>
+      <tr><td><code>daily</code></td><td>Runs every day including weekends</td></tr>
+      <tr><td><code>weekdays</code></td><td>Runs Monday–Friday; skips Saturday and Sunday</td></tr>
+      <tr><td><code>weekly</code></td><td>Runs once per week on the configured day (e.g. Monday)</td></tr>
+    </table>
+  </section>
+
+  <!-- MS TEAMS INTEGRATION -->
+  <section id="teams-integration">
+    <h2>MS Teams Integration</h2>
+    <p>AsyncStandUp supports three notification modes. Each team picks one independently:</p>
+
+    <table class="mode-table">
+      <tr>
+        <th>Mode</th><th>Prompt delivery</th><th>Answer method</th><th>Summary</th><th>Azure needed</th>
+      </tr>
+      <tr>
+        <td><span class="mode-badge email">email</span></td>
+        <td>Email (existing)</td><td>Web form link</td><td>Email</td><td>None</td>
+      </tr>
+      <tr>
+        <td><span class="mode-badge teams-summary">teams-summary</span></td>
+        <td>Email</td><td>Web form link</td><td>Teams channel (Adaptive Card)</td><td>None — webhook only</td>
+      </tr>
+      <tr>
+        <td><span class="mode-badge teams">teams</span></td>
+        <td>Teams DM (Adaptive Card)</td><td>Directly in Teams</td><td>Teams channel (Adaptive Card)</td><td>Bot registration (free)</td>
+      </tr>
+    </table>
+
+    <div class="callout info">
+      <div class="callout-icon">ℹ️</div>
+      <div>
+        <strong>Graceful degradation</strong>
+        If a Teams delivery fails (network error, bad credentials), the system automatically falls back to email and logs the error. Teams is an enhancement layer — the application always works.
+      </div>
+    </div>
+
+    <h3>Channel Summaries (no Azure required)</h3>
+    <ol>
+      <li>In your Teams channel → Apps → Connectors → Incoming Webhook → Create</li>
+      <li>Copy the webhook URL</li>
+      <li>In team settings, select <em>Teams Channel Summary only</em> and paste the URL</li>
+    </ol>
+    <p>That's it. The daily summary posts to the channel as an Adaptive Card with all member responses.</p>
+
+    <h3>Bot DM Prompts (bot registration required)</h3>
+    <ol>
+      <li>Go to <a href="https://portal.azure.com" target="_blank">Azure Portal</a> → Bot Services → Create → Free tier</li>
+      <li>Note the <code>App ID</code> and create a client secret (<code>App Secret</code>)</li>
+      <li>Set the messaging endpoint to <code>https://your-server.com/bot/webhook</code></li>
+      <li>Add to <code>config/config.php</code>:
+        <pre><code>'teams_bot' => [
+    'app_id'           => 'your-app-id',
+    'app_secret'       => 'your-app-secret',
+    'service_url'      => 'https://smba.trafficmanager.net/emea/',
+    'bot_webhook_path' => '/bot/webhook',
+],</code></pre>
+      </li>
+      <li>In team settings, select <em>Teams DM + Channel Summary</em></li>
+    </ol>
+
+    <div class="callout warning">
+      <div class="callout-icon">⚠️</div>
+      <div>
+        <strong>Production deployment note</strong>
+        The bot webhook JWT validation does not verify the RS256 cryptographic signature in the current version (adequate for dev/internal). Add JWKS-backed signature verification before exposing the bot webhook to the public internet. See <code>public/bot/webhook.php</code> for the TODO.
+      </div>
+    </div>
+
+    <div class="screenshot-section">
+      <img src="screenshots/08-admin-teams.png" alt="Admin Teams Integration page" />
+      <p class="screenshot-caption">The admin Teams Integration page shows each team's notification mode, webhook URL, and any recent delivery errors.</p>
+    </div>
+  </section>
+
+  <!-- REST API -->
+  <section id="api">
+    <h2>REST API</h2>
+    <p>Base URL: <code>https://your-server.com/api/v1/</code></p>
+    <p>All requests require an API key in the Authorization header:</p>
+    <pre><code>Authorization: Bearer sk-&lt;your-64-char-key&gt;</code></pre>
+    <p>Rate limit: <strong>100 requests per hour</strong> per API key. Exceeding returns HTTP 429 with a <code>Retry-After</code> header.</p>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/v1/teams</span>
+        <span class="endpoint-desc">List teams you are a member of</span>
+      </div>
+      <div class="endpoint-body">
+        <pre><code>curl -H "Authorization: Bearer sk-..." https://your-server.com/api/v1/teams</code></pre>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/v1/teams/{id}/questions</span>
+        <span class="endpoint-desc">Get questions for a team</span>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/v1/teams/{id}/submissions</span>
+        <span class="endpoint-desc">List submissions (paginated)</span>
+      </div>
+      <div class="endpoint-body">
+        <pre><code># Optional query params: ?date=2026-08-18&page=1&per_page=20</code></pre>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/v1/submissions/{id}</span>
+        <span class="endpoint-desc">Get a single submission with all answers</span>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method post">POST</span>
+        <span class="endpoint-path">/api/v1/teams/{id}/submissions</span>
+        <span class="endpoint-desc">Submit a standup programmatically</span>
+      </div>
+      <div class="endpoint-body">
+        <pre><code>curl -X POST \
+  -H "Authorization: Bearer sk-..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "answers": {
+      "1": "Fixed the login bug",
+      "2": "Writing tests for the auth module",
+      "3": ""
+    }
+  }' \
+  https://your-server.com/api/v1/teams/1/submissions</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- MCP SERVER -->
+  <section id="mcp">
+    <h2>MCP Server</h2>
+    <p>AsyncStandUp ships with a <a href="https://modelcontextprotocol.io" target="_blank">Model Context Protocol</a> server. Connect it to Claude Desktop or any MCP-compatible AI client to query and submit standups by natural language.</p>
+
+    <h3>Starting the server</h3>
+    <pre><code>ASYNCSTANDUP_API_KEY=sk-your-key php mcp/server.php</code></pre>
+
+    <h3>Claude Desktop configuration</h3>
+    <pre><code>{
+  "mcpServers": {
+    "asyncstandup": {
+      "command": "php",
+      "args": ["/path/to/asyncstandup/mcp/server.php"],
+      "env": {
+        "ASYNCSTANDUP_API_KEY": "sk-your-key"
+      }
+    }
+  }
+}</code></pre>
+
+    <h3>Available tools</h3>
+    <div class="tool-list">
+      <div class="tool-item">
+        <div class="tool-name">list_teams</div>
+        <div class="tool-desc">List all teams you are a member of</div>
+      </div>
+      <div class="tool-item">
+        <div class="tool-name">list_questions</div>
+        <div class="tool-desc">Get the standup questions for a team</div>
+      </div>
+      <div class="tool-item">
+        <div class="tool-name">get_submissions</div>
+        <div class="tool-desc">List standup submissions for a team (filterable by date)</div>
+      </div>
+      <div class="tool-item">
+        <div class="tool-name">get_submission</div>
+        <div class="tool-desc">Get a single submission with all answers</div>
+      </div>
+      <div class="tool-item">
+        <div class="tool-name">submit_standup</div>
+        <div class="tool-desc">Submit a standup for today</div>
+      </div>
+      <div class="tool-item">
+        <div class="tool-name">get_team_stats</div>
+        <div class="tool-desc">Get participation and mood statistics for a team</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ADMIN -->
+  <section id="admin">
+    <h2>Admin Panel</h2>
+    <div class="screenshot-section">
+      <img src="screenshots/09-admin-users.png" alt="Admin Users page" />
+      <p class="screenshot-caption">User administration — approve registrations, manage roles, see last login.</p>
+    </div>
+
+    <div class="screenshot-section">
+      <img src="screenshots/08-admin-teams.png" alt="Admin Teams Integration page" />
+      <p class="screenshot-caption">Teams Integration admin — mode badges, webhook URLs, last error with timestamp.</p>
+    </div>
+  </section>
+
+  <!-- API KEYS -->
+  <section id="api-keys">
+    <h2>API Key Management</h2>
+    <p>Each user manages their API keys from <strong>Profile → API Keys</strong>. Keys are:</p>
+    <ul>
+      <li>Generated with <code>bin2hex(random_bytes(32))</code> — 64-char hex, shown once only</li>
+      <li>Stored as a SHA-256 hash — the plain key is never stored</li>
+      <li>Soft-deleted on revoke (<code>revoked_at</code> timestamp) — audit trail preserved</li>
+    </ul>
+
+    <div class="screenshot-section">
+      <img src="screenshots/10-api-keys.png" alt="API Keys Management" />
+      <p class="screenshot-caption">API key management — generate named keys, view masked preview, revoke individually.</p>
+    </div>
+  </section>
+
+  <!-- CRON -->
+  <section id="cron">
+    <h2>Cron Jobs</h2>
+    <table>
+      <tr><th>Script</th><th>Purpose</th><th>Suggested time</th></tr>
+      <tr>
+        <td><code>cron/send_standups.php</code></td>
+        <td>Send standup prompt to each active developer</td>
+        <td>09:00 (per team timezone)</td>
+      </tr>
+      <tr>
+        <td><code>cron/send_standups.php reminder</code></td>
+        <td>Send reminder to members who haven't submitted</td>
+        <td>11:00</td>
+      </tr>
+      <tr>
+        <td><code>cron/send_summaries.php</code></td>
+        <td>Send daily summary email or Teams card</td>
+        <td>16:30</td>
+      </tr>
+    </table>
+
+    <pre><code># Example crontab (all times in UTC; adjust for your timezone)
+0  9  * * 1-5  www-data  php /var/www/asyncstandup/cron/send_standups.php
+0  11 * * 1-5  www-data  php /var/www/asyncstandup/cron/send_standups.php reminder
+30 16 * * 1-5  www-data  php /var/www/asyncstandup/cron/send_summaries.php</code></pre>
+
+    <div class="callout info">
+      <div class="callout-icon">ℹ️</div>
+      <div>Teams with <code>frequency = weekdays</code> are automatically skipped on weekends by the application. Teams with <code>frequency = weekly</code> are only triggered on their configured day.</div>
+    </div>
+  </section>
+
+  <!-- DATABASE -->
+  <section id="database">
+    <h2>Database</h2>
+    <table>
+      <tr><th>Backend</th><th>Schema file</th><th>Notes</th></tr>
+      <tr><td>SQLite</td><td><code>db/schema.sql</code> (used via PHP PDO)</td><td>Zero-config; suitable for single-server deployments</td></tr>
+      <tr><td>MySQL 5.7+</td><td><code>db/schema.sql</code></td><td>Good for multi-server or high-load deployments</td></tr>
+      <tr><td>PostgreSQL 13+</td><td><code>db/schema-postgresql.sql</code></td><td>Full ACID compliance; recommended for production</td></tr>
+    </table>
+    <p>Switch databases by changing the <code>db.driver</code> key in <code>config/config.php</code>. All three backends use the same application code — no ORM, plain PDO with parameterised queries.</p>
+  </section>
+
+  <!-- SECURITY -->
+  <section id="security">
+    <h2>Security Notes</h2>
+    <table>
+      <tr><th>Area</th><th>Status</th><th>Notes</th></tr>
+      <tr>
+        <td>Bot webhook JWT</td>
+        <td>⚠️ Partial</td>
+        <td>aud/iss/exp validated; RS256 signature not verified. TODO before production go-live.</td>
+      </tr>
+      <tr>
+        <td>Bot token cache</td>
+        <td>✅ Restricted</td>
+        <td>Cached to <code>sys_get_temp_dir()</code> with <code>chmod 0600</code>.</td>
+      </tr>
+      <tr>
+        <td>API keys</td>
+        <td>✅ SHA-256 hash only</td>
+        <td>Raw key displayed once at generation; never stored in plaintext.</td>
+      </tr>
+      <tr>
+        <td>Teams webhook SSRF</td>
+        <td>✅ Mitigated</td>
+        <td>Webhook URLs validated: HTTPS-only, FILTER_VALIDATE_URL, str_starts_with check. Bot serviceUrl restricted to known Bot Framework domains.</td>
+      </tr>
+      <tr>
+        <td>SQL injection</td>
+        <td>✅ Parameterised</td>
+        <td>All queries use PDO prepared statements throughout.</td>
+      </tr>
+      <tr>
+        <td>XSS</td>
+        <td>✅ Encoded</td>
+        <td>All user-supplied output through <code>htmlspecialchars(ENT_QUOTES, 'UTF-8')</code>.</td>
+      </tr>
+      <tr>
+        <td>CSRF</td>
+        <td>✅ Token validation</td>
+        <td>All POST forms include and validate a CSRF token.</td>
+      </tr>
+      <tr>
+        <td>Rate limiting</td>
+        <td>✅ API only</td>
+        <td>100 requests/hour per API key; 429 with Retry-After on breach.</td>
+      </tr>
+    </table>
+  </section>
+
+  <!-- TESTING -->
+  <section id="testing">
+    <h2>Test Suite</h2>
+    <pre><code>php php83/php.exe tests/phpunit.phar --configuration tests/phpunit.xml</code></pre>
+    <table>
+      <tr><th>Metric</th><th>Value</th></tr>
+      <tr><td>Tests</td><td>127</td></tr>
+      <tr><td>Assertions</td><td>255</td></tr>
+      <tr><td>PHPStan level</td><td>5 (0 errors)</td></tr>
+      <tr><td>Coverage</td><td>All src/ classes; all DB schemas; all API endpoints</td></tr>
+    </table>
+    <p>Tests use a fresh SQLite in-memory database per test class. No external services, no mocking of HTTP calls — all tests run against real production functions.</p>
+  </section>
+
+  <!-- CHANGELOG -->
+  <section id="changelog">
+    <h2>What Was Built (Story History)</h2>
+    <table>
+      <tr><th>Story</th><th>Feature</th></tr>
+      <tr><td>US-1–10</td><td>Core: teams, members, questions, email prompts, submissions, summary emails, PHPUnit suite</td></tr>
+      <tr><td>US-11–20</td><td>Organisations, invitations, admin panel, response browser, dashboard, PDF reports</td></tr>
+      <tr><td>US-21–28</td><td>API key auth, consensus alerting, member history, team hardening</td></tr>
+      <tr><td>US-29</td><td>Submission reminders</td></tr>
+      <tr><td>US-30</td><td>Configurable standup frequency</td></tr>
+      <tr><td>US-31+32</td><td>Blocker flagging + mood tracking</td></tr>
+      <tr><td>US-33</td><td>Public REST API (5 endpoints, API key auth, rate limiting)</td></tr>
+      <tr><td>US-34</td><td>MCP Server (stdio, 6 tools)</td></tr>
+      <tr><td>US-35</td><td>API key management UI (generate, list, revoke, soft-delete)</td></tr>
+      <tr><td>US-36</td><td>MS Teams schema + per-team mode selector</td></tr>
+      <tr><td>US-37</td><td>Teams channel summary via Incoming Webhook + Adaptive Card</td></tr>
+      <tr><td>US-38</td><td>Bot DM prompts (proactive Adaptive Card with inline answer fields)</td></tr>
+      <tr><td>US-39</td><td>Bot webhook endpoint — card submission handler, replay guard, confirmation DM</td></tr>
+      <tr><td>US-40</td><td>Teams fallback error tracking + admin visibility page</td></tr>
+    </table>
+  </section>
+
+</main>
+</div>
+
+<footer>
+  <p>AsyncStandUp &mdash; MIT License &mdash; <a href="https://github.com/cedric-r/asyncstandup">github.com/cedric-r/asyncstandup</a></p>
+</footer>
+
+</body>
+</html>
