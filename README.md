@@ -1,309 +1,282 @@
 # AsyncStandUp
 
-> **Async standup system** — no frameworks, no npm, no Composer in production. Pure PHP 8.1 + MySQL / PostgreSQL / SQLite + raw-socket SMTP.
+![PHP 8.3](https://img.shields.io/badge/PHP-8.3-8892BF?logo=php&logoColor=white)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![Tests: 127](https://img.shields.io/badge/tests-127%20passing-brightgreen)
+![PHPStan: level 5](https://img.shields.io/badge/PHPStan-level%205-blue)
 
-Teams receive a daily standup prompt email, submit answers via a unique link, and a summary is emailed to recipients — all without anyone logging in to a tool during their day.
+Self-hosted async standup tool. No Azure subscription required for core features. Runs on PHP 8.3 + SQLite (or MySQL / PostgreSQL). Delivers daily standup prompts and summaries by email or MS Teams.
 
 ---
 
 ## Features
 
-- 📧 **Daily standup prompts** — cron sends personalised prompt emails at each team's configured local time
-- ✅ **Token-based submission** — members submit via a unique 48-hour link; no login required to submit
-- 📊 **Participation dashboard** — owners see a 7-day grid (✓ / ✗ / N/A) plus 30-day participation %
-- 🔍 **Response browser** — owners browse full answer history filtered by date and/or member
-- 📋 **Daily summary emails** — one consolidated summary sent 1 hour after standup time
-- 👥 **Multi-team support** — users can belong to multiple teams across multiple organisations
-- 🔑 **Invitation flow** — owners invite members via email; 7-day token; roles applied on accept
-- 🛡 **Admin approval** — new registrations require administrator approval before login
-- 🗑 **Self-service unsubscribe** — external recipients unsubscribe via a unique link in every summary
-- 🔁 **Send to all developers** — one toggle sends the summary to every developer member automatically
-- 🌍 **Per-team timezone** — standup time and all date math are computed in the team's local timezone
-- 📱 **Mobile-friendly UI** — Tailwind CSS (Play CDN) responsive layout; works at 375 px
-- 🔒 **Text-based CAPTCHA** — bot deterrent on login and registration (50 question bank)
-- 🔐 **Password reset** — email-based flow with 1-hour token expiry and concurrent-use guard
-- ⏸ **Team suspension** — owners can suspend a team to pause all emails while preserving all data; one click to reactivate
-- 🗑 **Safe team deletion** — deleting a team removes all data atomically; concurrent cron jobs never send emails to a deleted team's members; recipients shared with other teams are unaffected
-- 🗄 **Configurable DB backend** — supports MySQL, PostgreSQL, and SQLite via a single `driver` key in config; zero-dependency PDO abstraction
-- ⏩ **Weekend skip** — cron skips Saturday/Sunday in each team's local timezone
-- 📅 **Pending standup widget** — unexpired unsubmitted tokens shown on the dashboard
-- 🧪 **PHPUnit test suite** — 78 integration tests via PHAR (no Composer needed to run)
+| | Feature |
+|---|---|
+| ✅ | Team management — create, edit, suspend, delete teams |
+| ✅ | Configurable standup questions per team (order, blockers flag, mood flag) |
+| ✅ | Timezone-aware scheduling with configurable frequency (daily / weekdays / weekly) |
+| ✅ | Standup prompt delivery — email **or** MS Teams Adaptive Card DM |
+| ✅ | Web response form + Teams card submission via Bot Framework |
+| ✅ | Submission reminders (configurable window before expiry) |
+| ✅ | Blocker question flagging — ⚠️ highlighted in all summaries |
+| ✅ | Mood / sentiment tracking — 5-level score, 30-day trend graph |
+| ✅ | Daily summary delivery — email **or** Teams channel Incoming Webhook (Adaptive Card) |
+| ✅ | Response browser per team |
+| ✅ | Public REST API v1 — API key auth, rate-limited (100 req/hr) |
+| ✅ | MCP server — stdio transport, 6 tools, Claude Desktop + Pi SDK ready |
+| ✅ | API key management UI — generate, list, revoke (soft-delete) |
+| ✅ | MS Teams integration — 3 notification modes |
+| ✅ | Teams admin overview — mode badges, last delivery error tracking |
 
 ---
 
 ## Requirements
 
-| Requirement | Version / Notes |
-|---|---|
-| PHP | ≥ 8.1 |
-| PHP extensions | `pdo_mysql` (MySQL), `pdo_pgsql` (PostgreSQL), `pdo_sqlite` (SQLite), `openssl`, `mbstring` |
-| Database | MySQL ≥ 5.7 / MariaDB ≥ 10.3, **or** PostgreSQL ≥ 13, **or** SQLite ≥ 3.35 |
-| Web server | Apache or Nginx; document root = `public/` |
-| SMTP relay | Plain TCP relay (no AUTH); must be localhost or private network |
-| Cron | System cron or supervisor; runs every minute |
+- **PHP** 8.3+ (CLI for cron; FPM/Apache/Nginx for web)
+- **Database**: SQLite 3 (default) · MySQL 5.7+ · PostgreSQL 13+
+- **SMTP**: any plain relay (localhost Postfix, SendGrid, etc.)
+- **HTTPS**: required only for Teams Bot DM webhook endpoint (`/bot/webhook`)
 
 ---
 
 ## Installation
 
-### 1. Clone or download
-
 ```bash
-git clone https://github.com/your-org/asyncstandup.git /var/www/asyncstandup
-```
+# 1. Clone
+git clone https://github.com/cedric-r/asyncstandup.git
+cd asyncstandup
 
-### 2. Configure
-
-```bash
+# 2. Copy and edit config
 cp config/config.example.php config/config.php
+$EDITOR config/config.php
+
+# 3. Create the database (SQLite example)
+touch asyncstandup.sqlite
+php -r "require 'src/Db.php'; getDb(require 'config/config.php');"
+
+# 4. Apply schema
+sqlite3 asyncstandup.sqlite < db/schema.sql
+# MySQL: mysql asyncstandup < db/schema.sql
+# PostgreSQL: psql asyncstandup < db/schema-postgresql.sql
+
+# 5. Set up cron (see Cron Jobs section)
+# 6. Point your web server at public/
 ```
 
-Edit `config/config.php`:
+---
+
+## Configuration
+
+Edit `config/config.php` (copy from `config/config.example.php`):
 
 ```php
 return [
-    'app_url'  => 'https://standup.example.com',   // no trailing slash
-    'app_name' => 'AsyncStandUp',
-    'db'       => [
-        'host' => '127.0.0.1', 'port' => 3306,
-        'name' => 'asyncstandup', 'user' => 'dbuser', 'pass' => 'secret',
+    'app_url' => 'https://standup.example.com',
+
+    'db' => [
+        'driver'  => 'sqlite',   // sqlite | mysql | pgsql
+        'path'    => '/var/data/asyncstandup.sqlite',  // SQLite only
+        // MySQL / PostgreSQL:
+        'host'    => '127.0.0.1',
+        'port'    => 3306,
+        'name'    => 'asyncstandup',
+        'user'    => 'root',
+        'pass'    => '',
         'charset' => 'utf8mb4',
     ],
-    'smtp'     => [
-        'host' => 'localhost', 'port' => 25,
-        'from' => 'standup@example.com', 'from_name' => 'AsyncStandUp',
+
+    'smtp' => [
+        'host'      => 'localhost',
+        'port'      => 25,
+        'from'      => 'standup@example.com',
+        'from_name' => 'AsyncStandUp',
+    ],
+
+    // Optional — required for notification_channel = 'teams' (Bot DM prompts)
+    'teams_bot' => [
+        'app_id'           => 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+        'app_secret'       => 'your-bot-app-secret',
+        'service_url'      => 'https://smba.trafficmanager.net/emea/',
+        'bot_webhook_path' => '/bot/webhook',
     ],
 ];
 ```
 
-> `config/config.php` is gitignored — never commit real credentials.
+---
 
-### 3. Database setup
+## Notification Modes
 
-**MySQL (default):**
+Configure per team in **Team Settings → Notification Channel**.
+
+| Mode | Prompt delivery | Summary delivery | Requires |
+|---|---|---|---|
+| `email` | Email | Email | SMTP |
+| `teams` | Teams Adaptive Card DM | Email | Azure Bot registration + HTTPS |
+| `teams-summary` | Email | Teams Incoming Webhook (Adaptive Card) | Teams Incoming Webhook URL only |
+
+> **teams-summary** is the easiest Teams integration — no Azure account needed, just a Webhook URL from Teams admin.
+
+---
+
+## Cron Jobs
+
+Three independent passes. Recommended schedule (adjust times to suit):
+
+```cron
+# Pass 1 — Send standup prompts at each team's configured standup_time
+* * * * * php /var/www/asyncstandup/cron/send_standups.php >> /var/log/asyncstandup.log 2>&1
+
+# Pass 2 — Send submission reminders (fires ~2 h before token expiry)
+* * * * * php /var/www/asyncstandup/cron/send_standups.php reminder >> /var/log/asyncstandup.log 2>&1
+
+# Pass 3 — Send daily summaries after standup window closes
+* * * * * php /var/www/asyncstandup/cron/send_standups.php summary >> /var/log/asyncstandup.log 2>&1
+```
+
+---
+
+## REST API
+
+**Base URL**: `https://standup.example.com/api/v1`  
+**Auth**: `Authorization: Bearer sk-<api-key>`  
+**Rate limit**: 100 requests / hour per key
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/teams` | List teams accessible to the authenticated user |
+| `GET` | `/teams/{id}/questions` | List standup questions for a team |
+| `GET` | `/teams/{id}/submissions` | Recent submissions (paginated) |
+| `GET` | `/submissions/{id}` | Single submission with answers |
+| `POST` | `/submissions` | Submit a standup (`token` + `answers[]`) |
+
+**Example:**
+
 ```bash
-mysql -u root -p -e "CREATE DATABASE asyncstandup CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -u root -p asyncstandup < db/schema.sql
+curl -H "Authorization: Bearer sk-abc123" \
+     https://standup.example.com/api/v1/teams
+
+curl -X POST \
+     -H "Authorization: Bearer sk-abc123" \
+     -H "Content-Type: application/json" \
+     -d '{"token":"tok-xyz","answers":{"1":"Finished the PR","2":"Code review today"}}' \
+     https://standup.example.com/api/v1/submissions
 ```
 
-**PostgreSQL:**
+---
+
+## MCP Server
+
+Exposes 6 tools over stdio JSON-RPC 2.0 for use with AI assistants.
+
 ```bash
-psql -U postgres -c "CREATE DATABASE asyncstandup;"
-psql -U postgres asyncstandup < db/schema-postgresql.sql
-```
-Config:
-```php
-'db' => ['driver' => 'pgsql', 'host' => '127.0.0.1', 'port' => 5432,
-         'name' => 'asyncstandup', 'user' => 'appuser', 'pass' => 'secret'],
+ASYNCSTANDUP_API_KEY=sk-<key> php mcp/server.php
 ```
 
-**SQLite:**
-```bash
-sqlite3 /var/data/asyncstandup.db < tests/schema-sqlite.sql
-```
-Config:
-```php
-'db' => ['driver' => 'sqlite', 'path' => '/var/data/asyncstandup.db'],
-```
-> Ensure the directory is writable by the web server user and not web-accessible.
+**Tools:**
 
-### 4. Web server
+| Tool | Description |
+|---|---|
+| `list_teams` | List all teams |
+| `list_questions` | List questions for a team |
+| `get_submissions` | Recent submissions for a team |
+| `get_submission` | Single submission detail |
+| `submit_standup` | Submit answers for a token |
+| `get_team_stats` | Participation and mood statistics |
 
-**Document root**: `/path/to/asyncstandup/public/`
+**Claude Desktop** (`~/.config/claude/claude_desktop_config.json`):
 
-**Apache** — add to VirtualHost:
-```apache
-<Directory /var/www/asyncstandup/public>
-    AllowOverride All
-    Require all granted
-</Directory>
-```
-
-**Nginx**:
-```nginx
-server {
-    root /var/www/asyncstandup/public;
-    index index.php;
-    location / { try_files $uri $uri/ /index.php?$query_string; }
-    location ~ \.php$ {
-        fastcgi_pass unix:/run/php/php8.1-fpm.sock;
-        include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+```json
+{
+  "mcpServers": {
+    "asyncstandup": {
+      "command": "php",
+      "args": ["/var/www/asyncstandup/mcp/server.php"],
+      "env": { "ASYNCSTANDUP_API_KEY": "sk-<key>" }
     }
+  }
 }
 ```
 
-> Protect `logs/` from direct HTTP access:
-> ```nginx
-> location /logs/ { deny all; }
-> ```
-
-### 5. Cron
-
-Add to crontab (`crontab -e`):
-
-```cron
-* * * * * php /var/www/asyncstandup/cron/send_standups.php >> /var/log/asyncstandup.log 2>&1
-```
-
-The cron script sends prompt emails at each team's configured standup time and summary emails 1 hour later. Weekends are skipped in the team's local timezone.
-
-### 6. Create the first administrator
-
-Register an account at `/register.php`, then run:
-
-```sql
-UPDATE users
-SET is_admin = 1, account_status = 'approved'
-WHERE email = 'your@email.com';
-```
-
-Log in and use `/admin/users.php` to approve or reject subsequent registrations.
-
-> **Session flag note**: `is_admin` is stored in the session at login time. Changes take effect on the user's next login.
+See `mcp/README.md` for Pi SDK configuration.
 
 ---
 
-## Configuration reference
+## MS Teams Setup
 
-| Key | Description | Example |
-|---|---|---|
-| `app_url` | Base URL (no trailing slash) | `https://standup.example.com` |
-| `app_name` | Application name shown in emails and UI | `AsyncStandUp` |
-| `db.driver` | Database driver | `mysql` / `pgsql` / `sqlite` |
-| `db.host` | Host (MySQL / PostgreSQL only) | `127.0.0.1` |
-| `db.port` | Port (MySQL / PostgreSQL only) | `3306` / `5432` |
-| `db.name` | Database name (MySQL / PostgreSQL only) | `asyncstandup` |
-| `db.user` | Database user (MySQL / PostgreSQL only) | `appuser` |
-| `db.pass` | Database password (MySQL / PostgreSQL only) | — |
-| `db.charset` | Connection charset (MySQL only) | `utf8mb4` |
-| `db.path` | Absolute path to `.db` file (SQLite only) | `/var/data/asyncstandup.db` |
-| `smtp.host` | SMTP relay hostname | `localhost` |
-| `smtp.port` | SMTP port | `25` |
-| `smtp.from` | Sender email address | `standup@example.com` |
-| `smtp.from_name` | Sender display name | `AsyncStandUp` |
+### Channel summaries — no Azure account required
 
----
+Delivers a formatted Adaptive Card to a Teams channel after standup closes.
 
-## Email templates
+1. In Teams: go to the channel → **⋯ More options → Connectors → Incoming Webhook**
+2. Create a webhook, copy the URL
+3. In AsyncStandUp: **Team Settings → Notification Channel → Teams Summary**
+4. Paste the webhook URL into **Webhook URL**
+5. Done — summaries will be posted to the channel automatically
 
-All templates are in `templates/email/`. They are plain-text PHP files rendered via `renderEmailTemplate()`.
+### Bot DM prompts — Azure Bot registration required
 
-| Template | Triggered by | Variables |
-|---|---|---|
-| `invitation.php` | Team owner invites a member | `$team_name`, `$org_name`, `$inviter_name`, `$accept_url`, `$expires_days`, `$roles` |
-| `standup_prompt.php` | Cron at standup time | `$user_name`, `$org_name`, `$team_name`, `$standup_url`, `$send_date`, `$team_timezone`, `$questions[]` |
-| `standup_summary.php` | Cron 1 hour after standup | `$team_name`, `$send_date`, `$questions[]`, `$submitter_data[]`, `$non_submitters[]`, `$unsubscribe_url` |
-| `account_approved.php` | Admin approves a registration | `$user_name`, `$login_url`, `$app_name` |
-| `admin_new_registration.php` | New user registers | `$new_user_name`, `$new_user_email`, `$admin_url`, `$app_name` |
-| `password_reset.php` | Forgot-password request | `$user_name`, `$reset_url`, `$expires_minutes` |
+Delivers an interactive Adaptive Card directly to each team member's Teams DMs.
 
-To customise a template, edit the `.php` file directly. The `<?= $variable ?>` syntax outputs the value; wrap user content in `htmlspecialchars()` if rendering in HTML contexts (these templates are plain text).
+1. Register an Azure Bot (free tier): [Azure Portal → Bot Services](https://portal.azure.com)
+2. Note the **AppId** and generate an **App Secret** (client secret)
+3. Add to `config/config.php` under `teams_bot`
+4. Point the bot's **Messaging Endpoint** to `https://your-domain.com/bot/webhook`
+5. In AsyncStandUp: **Team Settings → Notification Channel → Teams DM**
+
+> **Note:** Members must first message the bot (or be added to a conversation) to establish a conversation reference before proactive DMs can be sent. First-time users automatically fall back to email.
+
+> **Security:** RS256 JWT signature verification is not enabled in v1. See `public/bot/webhook.php` for the TODO. Add JWKS verification before production deployment.
 
 ---
 
-## Running tests
+## Database
 
-The test suite uses PHPUnit 10 via PHAR. No Composer required.
+All three backends share the same schema structure. Migration files:
+
+| File | Purpose |
+|---|---|
+| `db/schema.sql` | MySQL schema (also used as reference) |
+| `db/schema-postgresql.sql` | PostgreSQL schema (`IF NOT EXISTS`, `SERIAL`, `TIMESTAMP`) |
+| `tests/schema-sqlite.sql` | SQLite schema (used in test suite) |
+
+---
+
+## Test Suite
 
 ```bash
-# Download PHPUnit PHAR once:
-wget https://phar.phpunit.de/phpunit-10.phar -O tests/phpunit.phar
-
-# Verify checksum (compare against https://phar.phpunit.de/phpunit-10.phar.sha256asc):
-sha256sum tests/phpunit.phar
-
-# Run the suite:
 php tests/phpunit.phar --configuration tests/phpunit.xml
 ```
 
-Tests use an in-memory SQLite database — no MySQL connection required. All 78 tests should pass with exit code 0.
+**127 tests · 255 assertions · PHPStan level 5 · zero errors**
 
-> `tests/phpunit.phar` is gitignored.
-
----
-
-## Tailwind CSS (production)
-
-The current deployment uses Tailwind's **Play CDN** (`cdn.tailwindcss.com`) — zero build step, but not suitable for production at scale (larger payload, no tree-shaking).
-
-**For production**, compile a static CSS file:
-
-```bash
-# Install Tailwind CLI (one-time, dev machine only):
-npm install -D tailwindcss
-
-# Compile and minify:
-npx tailwindcss \
-  -i ./public/assets/style.css \
-  -o ./public/assets/tailwind.min.css \
-  --content "./public/**/*.php,./templates/**/*.php" \
-  --minify
-```
-
-Then replace in `templates/layout.php`:
-```html
-<!-- Replace: -->
-<script src="https://cdn.tailwindcss.com"></script>
-
-<!-- With: -->
-<link rel="stylesheet" href="/assets/tailwind.min.css">
-```
+Test classes cover: DB abstraction, team lifecycle, answer history, reminders, frequency, blocker flagging, mood tracking, public API, MCP server, API key management, Teams schema, Teams channel summary, Teams bot prompts, bot webhook, Teams fallback/error tracking.
 
 ---
 
-## Security notes
+## Security Notes
 
-- **Always use HTTPS** — session cookies and the API key (if configured) are transmitted in plain text over HTTP; TLS is mandatory for any public deployment
-- **SMTP relay must be localhost or private network** — the mailer uses a plain TCP socket with no authentication; expose it only on loopback or a VPN-restricted interface
-- **Rate-limiting** — server-side login lockout: 5 failed attempts in 10 minutes locks the account for 5 minutes (tracked in `login_attempts` table). Password reset requests are rate-limited to 3 per 15 minutes per user. For additional protection add reverse-proxy rate limiting (nginx `limit_req_zone`).
-- **Session hardening** — cookies are set with `HttpOnly`, `SameSite=Lax`, and `Secure` (requires HTTPS); `use_strict_mode` is enabled
-- **CAPTCHA** — text-based CAPTCHA on login and registration reduces bot pressure; not a substitute for rate limiting
-- **`logs/` must not be web-accessible** — add `location /logs/ { deny all; }` (Nginx) or `Require all denied` (Apache `.htaccess`) to prevent log disclosure
+| Area | Status |
+|---|---|
+| Bot webhook JWT | ⚠️ Audience + issuer + expiry checked; RS256 JWKS signature verification **TODO before production** — see `public/bot/webhook.php` |
+| Bot access token cache | Stored in system temp dir as JSON; `chmod 0600` applied after write |
+| API keys | Stored as SHA-256 hash only; raw key displayed once at creation, never again |
+| Webhook serviceUrl | Validated against allowlist (`smba.trafficmanager.net`, `webchat.botframework.com`) before use — prevents Bearer token exfiltration |
+| Teams error tracking | Last delivery error stored per team; visible in admin overview only |
 
 ---
 
-## Upgrade notes
+## Admin Panel
 
-When upgrading from an older version, run the ALTER TABLE statements listed in `db/schema.sql` (appended at the bottom). These are safe to run in order on an existing database.
+Access at `/admin/` (admin users only).
 
-| Change | Statement | Story |
+| Page | URL | Description |
 |---|---|---|
-| Nullable user_id on submissions/tokens | `ALTER TABLE standup_submissions MODIFY user_id INT UNSIGNED NULL;` | US-16 |
-| Nullable user_id on tokens | `ALTER TABLE standup_tokens MODIFY user_id INT UNSIGNED NULL;` | US-16 |
-| Nullable created_by on orgs/teams | `ALTER TABLE organisations MODIFY created_by INT UNSIGNED NULL;` | US-16 |
-| Nullable created_by on teams | `ALTER TABLE teams MODIFY created_by INT UNSIGNED NULL;` | US-16 |
-| Admin flag + account status on users | `ALTER TABLE users ADD COLUMN is_admin TINYINT(1) NOT NULL DEFAULT 0, ADD COLUMN account_status VARCHAR(10) NOT NULL DEFAULT 'pending';` | US-17 |
-| Approve existing users after migration | `UPDATE users SET account_status = 'approved' WHERE account_status = 'pending';` | US-17 |
-| Unsubscribe token on recipients | `ALTER TABLE team_recipients ADD COLUMN unsubscribe_token VARCHAR(64) NULL UNIQUE;` | US-20 |
-| Summary to all developers flag | `ALTER TABLE teams ADD COLUMN summary_to_all_developers TINYINT(1) NOT NULL DEFAULT 0;` | US-21 |
-| Configurable DB backend | No DB migration needed — `driver` key is new in config only | US-25 |
-| Team status column | `ALTER TABLE teams ADD COLUMN status VARCHAR(10) NOT NULL DEFAULT 'active';` | US-26 |
-| Deletion hardening | No schema change — `deleteTeam()` is now transaction-wrapped | US-27 |
+| User management | `/admin/users.php` | List, invite, promote users |
+| Teams overview | `/admin/teams.php` | All teams with mode badges and last Teams error |
 
 ---
 
-## Architecture
+## License
 
-```
-config/          — configuration (only example committed)
-cron/            — CLI scripts for timed email delivery (run every minute)
-db/              — schema.sql (MySQL), schema-postgresql.sql (PostgreSQL); SQLite schema at tests/schema-sqlite.sql
-logs/            — error logs (gitignored *.log)
-public/          — document root; all PHP pages served here
-  admin/         — admin-only pages (requireAdmin() enforced)
-  assets/        — style.css (Tailwind overrides + print styles)
-  invitations/   — send.php + accept.php
-  orgs/          — organisation CRUD
-  teams/         — team CRUD, dashboard, members, questions, recipients, responses
-src/             — PHP source classes (plain functions; no autoloading)
-templates/       — HTML layout and email templates
-  email/         — plain-text email templates
-tests/           — PHPUnit integration tests (SQLite in-memory)
-```
-
----
-
-## Licence
-
-MIT — see `LICENCE` (or add your own).
+MIT — see [LICENSE](LICENSE)
