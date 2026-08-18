@@ -22,6 +22,7 @@ require_once __DIR__ . '/../src/OrgRepository.php';
 require_once __DIR__ . '/../src/SubmissionRepository.php';
 require_once __DIR__ . '/../src/ApiAuth.php';
 require_once __DIR__ . '/../src/ApiKeyRepository.php';
+require_once __DIR__ . '/../src/TeamsBot.php';
 require_once __DIR__ . '/../src/TeamsMessageBuilder.php';
 require_once __DIR__ . '/../src/TeamsNotifier.php';
 require_once __DIR__ . '/../src/McpServer.php';

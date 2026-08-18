@@ -49,4 +49,13 @@ return [
         'from_name' => 'AsyncStandUp',
     ],
 
+    // ── MS Teams Bot (optional — required for notification_channel = 'teams') ─
+    // Generate credentials in Azure Portal → App registrations → your bot app.
+    'teams_bot' => [
+        'app_id'           => 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', // Azure Bot AppId
+        'app_secret'       => 'your-bot-app-secret',
+        'service_url'      => 'https://smba.trafficmanager.net/emea/', // varies by region
+        'bot_webhook_path' => '/bot/webhook', // HTTPS path Teams calls back for card submissions
+    ],
+
 ];

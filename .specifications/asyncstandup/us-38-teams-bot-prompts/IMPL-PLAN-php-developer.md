@@ -1,6 +1,6 @@
 # IMPL-PLAN — US-38: Bot DM Prompts
 
-**Status**: PENDING GATE C APPROVAL
+**Status**: APPROVED
 **Branch**: `feature/us-38-teams-bot-prompts`
 **Agent**: PHP Developer (`fa2e6dbf`)
 **Story**: US-38 — Bot DM Prompts (Proactive Message via Bot Framework)

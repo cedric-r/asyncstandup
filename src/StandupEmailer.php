@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/OrgRepository.php';
+require_once __DIR__ . '/TeamsBot.php';
 
 /**
  * Return all active teams from the DB.
@@ -124,20 +125,34 @@ function sendStandupPrompt(PDO $pdo, array $config, array $team, array $member, 
 {
     $standupUrl = rtrim($config['app_url'], '/') . '/submit.php?token=' . urlencode($token);
 
-    // Load team questions.
-    $stmt = $pdo->prepare('SELECT question FROM team_questions WHERE team_id = ? ORDER BY position ASC');
+    // Load team questions (with id for Teams DM; text for email template).
+    $stmt = $pdo->prepare('SELECT id, question FROM team_questions WHERE team_id = ? ORDER BY position ASC');
     $stmt->execute([$team['id']]);
-    $questions = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    $questionRows  = $stmt->fetchAll(); // [['id'=>int,'question'=>string], ...]
+    // String-only list for the email template (which iterates $q as a plain string).
+    $questionTexts = array_column($questionRows, 'question');
 
     $userName     = $member['display_name'] ?? $member['email'];
     $teamName     = $team['name'];
     $teamTimezone = $team['timezone'];
+
+    // US-38: Teams DM prompt (mode = 'teams' only; 'teams-summary' stays email for prompts).
+    $channel   = (string) ($team['notification_channel'] ?? 'email');
+    $botConfig = $config['teams_bot'] ?? [];
+    if ($channel === 'teams' && !empty($botConfig)) {
+        $sent = sendDmPrompt($pdo, $member, $team, $questionRows, $token, $botConfig);
+        if ($sent) {
+            return; // DM sent successfully — skip email.
+        }
+        error_log("[AsyncStandUp] Teams DM failed for user {$member['id']} team {$team['id']} — falling back to email");
+    }
 
     // Load org name for email subject and body (Feature 2).
     $orgRow  = getOrgById($pdo, (int) $team['org_id']);
     $orgName = $orgRow['name'] ?? '';
 
     ob_start();
+    $questions = $questionTexts; // email template expects string[]
     extract(compact('userName', 'teamName', 'orgName', 'standupUrl', 'sendDate', 'teamTimezone', 'questions'), EXTR_SKIP);
     include __DIR__ . '/../templates/email/standup_prompt.php';
     $body = (string) ob_get_clean();
