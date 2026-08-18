@@ -7,6 +7,8 @@
 
 Self-hosted async standup tool. No Azure subscription required for core features. Runs on PHP 8.3 + SQLite (or MySQL / PostgreSQL). Delivers daily standup prompts and summaries by email or MS Teams.
 
+📖 **[Full documentation →](https://cedric-r.github.io/asyncstandup/)**
+
 ---
 
 ## Features
