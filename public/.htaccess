@@ -1,6 +1,9 @@
 RewriteEngine On
 RewriteBase /
 
+# Bot webhook
+RewriteRule ^bot/webhook$ bot/webhook.php [L,QSA]
+
 # API routing — must precede any other RewriteRules
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^api/v1/(.*)$ api/v1/index.php [L,QSA]
