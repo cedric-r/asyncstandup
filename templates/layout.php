@@ -27,6 +27,7 @@
       <div class="flex items-center gap-4 text-sm">
         <?php if (!empty($_SESSION['is_admin'])): ?>
         <a href="/admin/users.php" class="text-amber-600 hover:text-amber-700 font-medium">Admin</a>
+        <a href="/admin/teams.php" class="text-amber-600 hover:text-amber-700 font-medium">Teams</a>
         <?php endif; ?>
         <a href="/profile.php" class="text-gray-600 hover:text-indigo-600">
           <?= htmlspecialchars($currentUser['display_name'] ?? $currentUser['email'], ENT_QUOTES, 'UTF-8') ?>

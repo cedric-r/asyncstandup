@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/OrgRepository.php';
 require_once __DIR__ . '/TeamsBot.php';
+require_once __DIR__ . '/TeamRepository.php';
 
 /**
  * Return all active teams from the DB.
@@ -142,9 +143,12 @@ function sendStandupPrompt(PDO $pdo, array $config, array $team, array $member, 
     if ($channel === 'teams' && !empty($botConfig)) {
         $sent = sendDmPrompt($pdo, $member, $team, $questionRows, $token, $botConfig);
         if ($sent) {
+            clearTeamsError($pdo, (int) $team['id']);
             return; // DM sent successfully — skip email.
         }
-        error_log("[AsyncStandUp] Teams DM failed for user {$member['id']} team {$team['id']} — falling back to email");
+        $dmErrMsg = "Teams DM failed for user {$member['id']} team {$team['id']}";
+        error_log("[AsyncStandUp] {$dmErrMsg} — falling back to email");
+        recordTeamsError($pdo, (int) $team['id'], $dmErrMsg);
     }
 
     // Load org name for email subject and body (Feature 2).

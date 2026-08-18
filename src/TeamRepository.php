@@ -404,3 +404,44 @@ function removeRecipient(PDO $pdo, int $recipientId, int $teamId): void
     $pdo->prepare('DELETE FROM team_recipients WHERE id = ? AND team_id = ?')
         ->execute([$recipientId, $teamId]);
 }
+
+/**
+ * Record a Teams delivery error on the team row for admin visibility.
+ * Truncates message to 255 characters to fit the column.
+ */
+function recordTeamsError(PDO $pdo, int $teamId, string $message): void
+{
+    $pdo->prepare(
+        'UPDATE teams SET teams_last_error = ?, teams_last_error_at = ? WHERE id = ?'
+    )->execute([mb_substr($message, 0, 255), gmdate('Y-m-d H:i:s'), $teamId]);
+}
+
+/**
+ * Clear any previously recorded Teams delivery error on the team row.
+ */
+function clearTeamsError(PDO $pdo, int $teamId): void
+{
+    $pdo->prepare(
+        'UPDATE teams SET teams_last_error = NULL, teams_last_error_at = NULL WHERE id = ?'
+    )->execute([$teamId]);
+}
+
+/**
+ * Return all teams with their org name and Teams integration status.
+ * Used by the admin Teams overview page.
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function getTeamsAdminOverview(PDO $pdo): array
+{
+    $stmt = $pdo->query('
+        SELECT t.id, t.name AS team_name, t.notification_channel,
+               t.teams_webhook_url, t.teams_channel_name,
+               t.teams_last_error, t.teams_last_error_at,
+               o.name AS org_name
+        FROM teams t
+        JOIN organisations o ON o.id = t.org_id
+        ORDER BY o.name, t.name
+    ');
+    return $stmt->fetchAll();
+}

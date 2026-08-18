@@ -204,3 +204,7 @@ ALTER TABLE teams ADD COLUMN IF NOT EXISTS teams_conversation_ref TEXT         N
 -- US-36: MS Teams integration — users columns
 ALTER TABLE users ADD COLUMN IF NOT EXISTS teams_aad_id           VARCHAR(100) NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS teams_conversation_ref TEXT         NULL;
+
+-- US-40: Teams delivery error tracking
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS teams_last_error    VARCHAR(255) NULL;
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS teams_last_error_at TIMESTAMP   NULL;

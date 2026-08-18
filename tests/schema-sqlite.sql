@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS teams (
     teams_webhook_url      TEXT NULL,
     teams_channel_name     TEXT NULL,
     teams_conversation_ref TEXT NULL,
+    teams_last_error        TEXT NULL,
+    teams_last_error_at     TEXT NULL,
     FOREIGN KEY (org_id)     REFERENCES organisations(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
