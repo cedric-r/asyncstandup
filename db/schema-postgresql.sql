@@ -194,3 +194,13 @@ CREATE INDEX IF NOT EXISTS idx_api_log_key_time ON api_request_log (key_hash, re
 -- US-35: API key management — rename label → name, add soft-delete column
 ALTER TABLE api_keys RENAME COLUMN label TO name;
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP NULL;
+
+-- US-36: MS Teams integration — teams columns
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS notification_channel   VARCHAR(10)  NOT NULL DEFAULT 'email';
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS teams_webhook_url      VARCHAR(500) NULL;
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS teams_channel_name     VARCHAR(100) NULL;
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS teams_conversation_ref TEXT         NULL;
+
+-- US-36: MS Teams integration — users columns
+ALTER TABLE users ADD COLUMN IF NOT EXISTS teams_aad_id           VARCHAR(100) NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS teams_conversation_ref TEXT         NULL;

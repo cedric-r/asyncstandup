@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS users (
     timezone       TEXT NOT NULL DEFAULT 'UTC',
     is_admin       INTEGER NOT NULL DEFAULT 0,
     account_status TEXT NOT NULL DEFAULT 'pending',
-    created_at     TEXT NOT NULL DEFAULT ''
+    created_at     TEXT NOT NULL DEFAULT '',
+    teams_aad_id           TEXT NULL,
+    teams_conversation_ref TEXT NULL
 );
 
 CREATE TABLE IF NOT EXISTS organisations (
@@ -49,6 +51,10 @@ CREATE TABLE IF NOT EXISTS teams (
     status       TEXT NOT NULL DEFAULT 'active',
     created_by   INTEGER NULL,
     created_at   TEXT NOT NULL DEFAULT '',
+    notification_channel   TEXT NOT NULL DEFAULT 'email',
+    teams_webhook_url      TEXT NULL,
+    teams_channel_name     TEXT NULL,
+    teams_conversation_ref TEXT NULL,
     FOREIGN KEY (org_id)     REFERENCES organisations(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
