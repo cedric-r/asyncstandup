@@ -195,9 +195,10 @@ class BotActivityHandler
     private function sendConfirmationDm(array $activity, string $status): void
     {
         try {
-            $serviceUrl = (string) ($activity['serviceUrl'] ?? '');
-            $convId     = (string) ($activity['conversation']['id'] ?? '');
-            if ($serviceUrl === '' || $convId === '') {
+            $rawServiceUrl = (string) ($activity['serviceUrl'] ?? '');
+            $serviceUrl    = $this->sanitiseServiceUrl($rawServiceUrl);
+            $convId        = (string) ($activity['conversation']['id'] ?? '');
+            if ($serviceUrl === null || $serviceUrl === '' || $convId === '') {
                 return;
             }
 
