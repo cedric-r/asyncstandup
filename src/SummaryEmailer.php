@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/TeamsMessageBuilder.php';
 require_once __DIR__ . '/TeamsNotifier.php';
+require_once __DIR__ . '/TeamRepository.php';
 
 /**
  * Return true if team's summary time (standup_time + 1 hour) is within 60 s of nowUtc.
@@ -312,9 +313,12 @@ function sendSummaryEmail(PDO $pdo, array $config, array $team, string $sendDate
         $card    = buildSummaryCard($summaryCardData);
         $success = postChannelSummary((string) $team['teams_webhook_url'], $card);
         if (!$success) {
-            error_log("[AsyncStandUp] Teams webhook failed for team {$teamId} — falling back to email");
+            $errMsg = "Teams webhook failed for team {$teamId}";
+            error_log("[AsyncStandUp] {$errMsg} — falling back to email");
+            recordTeamsError($pdo, (int) $teamId, $errMsg);
             // Fall through to email sending below.
         } else {
+            clearTeamsError($pdo, (int) $teamId);
             return; // Teams posting succeeded — no email needed.
         }
     }
