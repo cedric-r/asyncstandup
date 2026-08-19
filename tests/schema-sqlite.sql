@@ -196,6 +196,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     created_at   TEXT NOT NULL DEFAULT '',
     last_used_at TEXT NULL,
     revoked_at   TEXT NULL,
+    expires_at   TEXT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 

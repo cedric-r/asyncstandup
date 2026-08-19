@@ -6,8 +6,9 @@ declare(strict_types=1);
  * Authenticate from Authorization: Bearer <key> header.
  *
  * @return array{id: int, user_id: int, key_hash: string, name: string,
- *               created_at: string, last_used_at: string|null, revoked_at: string|null}|null
- *         The api_keys row, or null if the key is missing, invalid, or revoked.
+ *               created_at: string, last_used_at: string|null,
+ *               revoked_at: string|null, expires_at: string|null}|null
+ *         The api_keys row, or null if the key is missing, invalid, revoked, or expired.
  */
 function authenticateApiKey(PDO $pdo): ?array
 {
@@ -24,6 +25,12 @@ function authenticateApiKey(PDO $pdo): ?array
     $row = $stmt->fetch();
 
     if ($row === false) {
+        return null;
+    }
+
+    // PHP-level expiry check — uses gmdate() for SQLite test compatibility.
+    // (UTC_TIMESTAMP() is MySQL-only; PHP string comparison works for both.)
+    if ($row['expires_at'] !== null && $row['expires_at'] < gmdate('Y-m-d H:i:s')) {
         return null;
     }
 

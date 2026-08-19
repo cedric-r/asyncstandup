@@ -17,6 +17,89 @@ class ApiKeyRepositoryTest extends TestCase
         $this->pdo->exec("INSERT INTO users (id, email, password_hash) VALUES (2, 'u2@x.com', 'h2')");
     }
 
+    protected function tearDown(): void
+    {
+        unset($_SERVER['HTTP_AUTHORIZATION']);
+    }
+
+    // =========================================================================
+    // Path B — Characterisation: ApiAuth::authenticateApiKey()
+    // File src/ApiAuth.php has no existing tests — using characterisation path.
+    // These tests pin current behaviour against the UNMODIFIED ApiAuth.php.
+    // =========================================================================
+
+    public function testAuthenticateApiKeyReturnsNullForMissingHeader(): void
+    {
+        unset($_SERVER['HTTP_AUTHORIZATION']);
+
+        $result = authenticateApiKey($this->pdo);
+
+        $this->assertNull($result);
+    }
+
+    public function testAuthenticateApiKeyReturnsNullForInvalidKey(): void
+    {
+        $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer invalidkeyvalue';
+
+        $result = authenticateApiKey($this->pdo);
+
+        $this->assertNull($result);
+    }
+
+    public function testAuthenticateApiKeyReturnsRowForValidKey(): void
+    {
+        $rawKey  = bin2hex(random_bytes(32));
+        $keyHash = hash('sha256', $rawKey);
+        $now     = gmdate('Y-m-d H:i:s');
+        $this->pdo->prepare(
+            'INSERT INTO api_keys (user_id, key_hash, name, created_at) VALUES (?, ?, ?, ?)'
+        )->execute([1, $keyHash, 'chartest', $now]);
+
+        $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $rawKey;
+
+        $result = authenticateApiKey($this->pdo);
+
+        $this->assertIsArray($result);
+        $this->assertSame($keyHash, $result['key_hash']);
+        $this->assertSame(1, (int) $result['user_id']);
+    }
+
+    // =========================================================================
+    // Existing ApiKeyRepository tests
+    // =========================================================================
+
+    // -------------------------------------------------------------------------
+    // Path B — Characterisation: ApiKeyRepository existing signatures
+    // File src/ApiKeyRepository.php has partial coverage — using characterisation path.
+    // These tests pin current behaviour against UNMODIFIED ApiKeyRepository.php.
+    // -------------------------------------------------------------------------
+
+    public function testCreateApiKeyExistingSignatureAcceptsNameOnly(): void
+    {
+        // Current signature: createApiKey(PDO, int, string) — 3 args, no expires_at param yet.
+        createApiKey($this->pdo, 1, 'chartest-repo');
+
+        $row = $this->pdo->query("SELECT expires_at FROM api_keys WHERE user_id = 1")->fetch();
+        $this->assertNull($row['expires_at']);
+    }
+
+    public function testListApiKeysForUserShapeIncludesExpiresAt(): void
+    {
+        // Updated from characterisation (intentional behaviour change in Task 5):
+        // listApiKeysForUser() now includes expires_at and is_expired in the return shape.
+        createApiKey($this->pdo, 1, 'chartest-list');
+
+        $keys = listApiKeysForUser($this->pdo, 1);
+
+        $this->assertCount(1, $keys);
+        $this->assertArrayHasKey('expires_at', $keys[0]);
+        $this->assertArrayHasKey('is_expired', $keys[0]);
+        $this->assertNull($keys[0]['expires_at']);
+        $this->assertFalse($keys[0]['is_expired']);
+    }
+
+    // -------------------------------------------------------------------------
+
     public function testCreateApiKeyReturnsPlainTextKey(): void
     {
         $rawKey = createApiKey($this->pdo, 1, 'Test key');
@@ -63,5 +146,116 @@ class ApiKeyRepositoryTest extends TestCase
 
         $row = $this->pdo->query("SELECT revoked_at FROM api_keys WHERE id = $keyId")->fetch();
         $this->assertNull($row['revoked_at']);
+    }
+
+    // =========================================================================
+    // AC-6 — API Key Expiry Date scenarios (Path A)
+    // =========================================================================
+
+    public function testCreateApiKeyWithNoExpiryStoresNullExpiresAt(): void
+    {
+        createApiKey($this->pdo, 1, 'no-expiry-key');
+
+        $row = $this->pdo->query("SELECT expires_at FROM api_keys WHERE user_id = 1")->fetch();
+        $this->assertNull($row['expires_at']);
+    }
+
+    public function testCreateApiKeyWithExpiryStoresExpiresAt(): void
+    {
+        $expiresAt = '2099-12-31 23:59:59';
+        createApiKey($this->pdo, 1, 'expiring-key', $expiresAt);
+
+        $row = $this->pdo->query("SELECT expires_at FROM api_keys WHERE user_id = 1")->fetch();
+        $this->assertSame($expiresAt, $row['expires_at']);
+    }
+
+    public function testListApiKeysIsExpiredFalseForFutureExpiry(): void
+    {
+        createApiKey($this->pdo, 1, 'future-key', '2099-12-31 23:59:59');
+
+        $keys = listApiKeysForUser($this->pdo, 1);
+
+        $this->assertCount(1, $keys);
+        $this->assertFalse($keys[0]['is_expired']);
+        $this->assertSame('2099-12-31 23:59:59', $keys[0]['expires_at']);
+    }
+
+    public function testListApiKeysIsExpiredTrueForPastExpiry(): void
+    {
+        createApiKey($this->pdo, 1, 'past-key', '2000-01-01 00:00:00');
+
+        $keys = listApiKeysForUser($this->pdo, 1);
+
+        $this->assertCount(1, $keys);
+        $this->assertTrue($keys[0]['is_expired']);
+        $this->assertSame('2000-01-01 00:00:00', $keys[0]['expires_at']);
+    }
+
+    public function testAuthenticateApiKeyReturnsNullForExpiredKey(): void
+    {
+        $rawKey  = bin2hex(random_bytes(32));
+        $keyHash = hash('sha256', $rawKey);
+        $this->pdo->prepare(
+            'INSERT INTO api_keys (user_id, key_hash, name, created_at, expires_at) VALUES (?, ?, ?, ?, ?)'
+        )->execute([1, $keyHash, 'expired-key', gmdate('Y-m-d H:i:s'), '2000-01-01 00:00:00']);
+
+        $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $rawKey;
+
+        $result = authenticateApiKey($this->pdo);
+
+        $this->assertNull($result);
+    }
+
+    public function testAuthenticateApiKeyReturnsRowForValidNonExpiredKey(): void
+    {
+        $rawKey  = bin2hex(random_bytes(32));
+        $keyHash = hash('sha256', $rawKey);
+        $this->pdo->prepare(
+            'INSERT INTO api_keys (user_id, key_hash, name, created_at, expires_at) VALUES (?, ?, ?, ?, ?)'
+        )->execute([1, $keyHash, 'valid-future-key', gmdate('Y-m-d H:i:s'), '2099-12-31 23:59:59']);
+
+        $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $rawKey;
+
+        $result = authenticateApiKey($this->pdo);
+
+        $this->assertIsArray($result);
+        $this->assertSame($keyHash, $result['key_hash']);
+        $this->assertSame('2099-12-31 23:59:59', $result['expires_at']);
+    }
+
+    // =========================================================================
+    // AC — getApiKey() Path A tests
+    // =========================================================================
+
+    public function testGetApiKeyReturnsRowForValidIdAndUserId(): void
+    {
+        createApiKey($this->pdo, 1, 'fetch-me');
+        $keyId = (int) $this->pdo->lastInsertId();
+
+        $row = getApiKey($this->pdo, $keyId, 1);
+
+        $this->assertIsArray($row);
+        $this->assertSame($keyId, (int) $row['id']);
+        $this->assertSame(1, (int) $row['user_id']);
+        $this->assertSame('fetch-me', $row['name']);
+        $this->assertNull($row['expires_at']);
+    }
+
+    public function testGetApiKeyReturnsNullForWrongUserId(): void
+    {
+        // IDOR guard: user 2 must not be able to fetch user 1's key.
+        createApiKey($this->pdo, 1, 'user1-key');
+        $keyId = (int) $this->pdo->lastInsertId();
+
+        $result = getApiKey($this->pdo, $keyId, 2);
+
+        $this->assertNull($result);
+    }
+
+    public function testGetApiKeyReturnsNullForNonExistentId(): void
+    {
+        $result = getApiKey($this->pdo, 99999, 1);
+
+        $this->assertNull($result);
     }
 }

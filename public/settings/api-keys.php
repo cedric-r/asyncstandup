@@ -27,10 +27,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (mb_strlen($name) > 100) {
             $errors[] = 'Key name must be 100 characters or fewer.';
         } else {
-            $rawKey = createApiKey($pdo, $userId, $name);
-            setFlash('api_key_created', $rawKey);
-            header('Location: /settings/api-keys.php');
-            exit;
+            $expiresAt = null;
+            $rawDate   = trim($_POST['expires_at'] ?? '');
+            if ($rawDate !== '') {
+                $dt = \DateTimeImmutable::createFromFormat('Y-m-d', $rawDate, new \DateTimeZone('UTC'));
+                if ($dt === false || $dt->format('Y-m-d') !== $rawDate) {
+                    $errors[] = 'Invalid expiry date format.';
+                } else {
+                    $expiresAt = $dt->format('Y-m-d') . ' 23:59:59';
+                }
+            }
+            if (empty($errors)) {
+                $rawKey = createApiKey($pdo, $userId, $name, $expiresAt);
+                setFlash('api_key_created', $rawKey);
+                header('Location: /settings/api-keys.php');
+                exit;
+            }
         }
     } elseif ($action === 'revoke') {
         $keyId = (int) ($_POST['key_id'] ?? 0);
@@ -92,8 +104,15 @@ ob_start();
                placeholder="e.g. CI pipeline"
                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
       </div>
+      <div class="mt-3">
+        <label for="expires-at" class="block text-sm font-medium text-gray-700 mb-1">
+          Expiry date <span class="text-gray-400 text-xs">(optional)</span>
+        </label>
+        <input type="date" id="expires-at" name="expires_at"
+               class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+      </div>
       <button type="submit"
-              class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm whitespace-nowrap">
+              class="mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm whitespace-nowrap">
         Create key
       </button>
     </form>
@@ -112,6 +131,7 @@ ob_start();
           <th class="text-left font-medium text-gray-600 pb-2">Key preview</th>
           <th class="text-left font-medium text-gray-600 pb-2">Created</th>
           <th class="text-left font-medium text-gray-600 pb-2">Last used</th>
+          <th class="text-left font-medium text-gray-600 pb-2">Expires</th>
           <th></th>
         </tr>
       </thead>
@@ -132,6 +152,23 @@ ob_start();
                 ? htmlspecialchars(substr((string) $key['last_used_at'], 0, 10), ENT_QUOTES, 'UTF-8')
                 : '—' ?>
           </td>
+          <?php if ($key['expires_at'] === null): ?>
+          <td class="py-2 pr-3 text-gray-400">—</td>
+          <?php elseif ($key['is_expired']): ?>
+          <td class="py-2 pr-3 text-red-600 line-through">
+            Expired <?= htmlspecialchars(
+                (new \DateTimeImmutable($key['expires_at']))->format('d M Y'),
+                ENT_QUOTES, 'UTF-8'
+            ) ?>
+          </td>
+          <?php else: ?>
+          <td class="py-2 pr-3 text-gray-600">
+            <?= htmlspecialchars(
+                (new \DateTimeImmutable($key['expires_at']))->format('d M Y'),
+                ENT_QUOTES, 'UTF-8'
+            ) ?>
+          </td>
+          <?php endif; ?>
           <td class="py-2 text-right">
             <form method="POST" action="/settings/api-keys.php">
               <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
