@@ -78,15 +78,19 @@ class ApiKeyRepositoryTest extends TestCase
         $this->assertNull($row['expires_at']);
     }
 
-    public function testListApiKeysForUserExistingShapeHasNoExpiresAt(): void
+    public function testListApiKeysForUserShapeIncludesExpiresAt(): void
     {
-        // Pins that the current listApiKeysForUser() return shape does NOT include expires_at.
+        // Updated from characterisation (intentional behaviour change in Task 5):
+        // listApiKeysForUser() now includes expires_at and is_expired in the return shape.
         createApiKey($this->pdo, 1, 'chartest-list');
 
         $keys = listApiKeysForUser($this->pdo, 1);
 
         $this->assertCount(1, $keys);
-        $this->assertArrayNotHasKey('expires_at', $keys[0]);
+        $this->assertArrayHasKey('expires_at', $keys[0]);
+        $this->assertArrayHasKey('is_expired', $keys[0]);
+        $this->assertNull($keys[0]['expires_at']);
+        $this->assertFalse($keys[0]['is_expired']);
     }
 
     // -------------------------------------------------------------------------
