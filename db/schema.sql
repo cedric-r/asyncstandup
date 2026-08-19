@@ -253,3 +253,6 @@ ALTER TABLE users ADD COLUMN teams_conversation_ref TEXT         NULL;
 -- US-40: Teams delivery error tracking
 ALTER TABLE teams ADD COLUMN teams_last_error    VARCHAR(255) NULL;
 ALTER TABLE teams ADD COLUMN teams_last_error_at DATETIME    NULL;
+
+-- US-41: API key expiry date
+ALTER TABLE api_keys ADD COLUMN expires_at DATETIME NULL;
