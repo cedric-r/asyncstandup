@@ -17,6 +17,11 @@ class ApiKeyRepositoryTest extends TestCase
         $this->pdo->exec("INSERT INTO users (id, email, password_hash) VALUES (2, 'u2@x.com', 'h2')");
     }
 
+    protected function tearDown(): void
+    {
+        unset($_SERVER['HTTP_AUTHORIZATION']);
+    }
+
     // =========================================================================
     // Path B — Characterisation: ApiAuth::authenticateApiKey()
     // File src/ApiAuth.php has no existing tests — using characterisation path.
@@ -216,5 +221,41 @@ class ApiKeyRepositoryTest extends TestCase
         $this->assertIsArray($result);
         $this->assertSame($keyHash, $result['key_hash']);
         $this->assertSame('2099-12-31 23:59:59', $result['expires_at']);
+    }
+
+    // =========================================================================
+    // AC — getApiKey() Path A tests
+    // =========================================================================
+
+    public function testGetApiKeyReturnsRowForValidIdAndUserId(): void
+    {
+        createApiKey($this->pdo, 1, 'fetch-me');
+        $keyId = (int) $this->pdo->lastInsertId();
+
+        $row = getApiKey($this->pdo, $keyId, 1);
+
+        $this->assertIsArray($row);
+        $this->assertSame($keyId, (int) $row['id']);
+        $this->assertSame(1, (int) $row['user_id']);
+        $this->assertSame('fetch-me', $row['name']);
+        $this->assertNull($row['expires_at']);
+    }
+
+    public function testGetApiKeyReturnsNullForWrongUserId(): void
+    {
+        // IDOR guard: user 2 must not be able to fetch user 1's key.
+        createApiKey($this->pdo, 1, 'user1-key');
+        $keyId = (int) $this->pdo->lastInsertId();
+
+        $result = getApiKey($this->pdo, $keyId, 2);
+
+        $this->assertNull($result);
+    }
+
+    public function testGetApiKeyReturnsNullForNonExistentId(): void
+    {
+        $result = getApiKey($this->pdo, 99999, 1);
+
+        $this->assertNull($result);
     }
 }
