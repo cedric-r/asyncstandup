@@ -63,6 +63,34 @@ class ApiKeyRepositoryTest extends TestCase
     // Existing ApiKeyRepository tests
     // =========================================================================
 
+    // -------------------------------------------------------------------------
+    // Path B — Characterisation: ApiKeyRepository existing signatures
+    // File src/ApiKeyRepository.php has partial coverage — using characterisation path.
+    // These tests pin current behaviour against UNMODIFIED ApiKeyRepository.php.
+    // -------------------------------------------------------------------------
+
+    public function testCreateApiKeyExistingSignatureAcceptsNameOnly(): void
+    {
+        // Current signature: createApiKey(PDO, int, string) — 3 args, no expires_at param yet.
+        createApiKey($this->pdo, 1, 'chartest-repo');
+
+        $row = $this->pdo->query("SELECT expires_at FROM api_keys WHERE user_id = 1")->fetch();
+        $this->assertNull($row['expires_at']);
+    }
+
+    public function testListApiKeysForUserExistingShapeHasNoExpiresAt(): void
+    {
+        // Pins that the current listApiKeysForUser() return shape does NOT include expires_at.
+        createApiKey($this->pdo, 1, 'chartest-list');
+
+        $keys = listApiKeysForUser($this->pdo, 1);
+
+        $this->assertCount(1, $keys);
+        $this->assertArrayNotHasKey('expires_at', $keys[0]);
+    }
+
+    // -------------------------------------------------------------------------
+
     public function testCreateApiKeyReturnsPlainTextKey(): void
     {
         $rawKey = createApiKey($this->pdo, 1, 'Test key');
