@@ -17,6 +17,52 @@ class ApiKeyRepositoryTest extends TestCase
         $this->pdo->exec("INSERT INTO users (id, email, password_hash) VALUES (2, 'u2@x.com', 'h2')");
     }
 
+    // =========================================================================
+    // Path B — Characterisation: ApiAuth::authenticateApiKey()
+    // File src/ApiAuth.php has no existing tests — using characterisation path.
+    // These tests pin current behaviour against the UNMODIFIED ApiAuth.php.
+    // =========================================================================
+
+    public function testAuthenticateApiKeyReturnsNullForMissingHeader(): void
+    {
+        unset($_SERVER['HTTP_AUTHORIZATION']);
+
+        $result = authenticateApiKey($this->pdo);
+
+        $this->assertNull($result);
+    }
+
+    public function testAuthenticateApiKeyReturnsNullForInvalidKey(): void
+    {
+        $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer invalidkeyvalue';
+
+        $result = authenticateApiKey($this->pdo);
+
+        $this->assertNull($result);
+    }
+
+    public function testAuthenticateApiKeyReturnsRowForValidKey(): void
+    {
+        $rawKey  = bin2hex(random_bytes(32));
+        $keyHash = hash('sha256', $rawKey);
+        $now     = gmdate('Y-m-d H:i:s');
+        $this->pdo->prepare(
+            'INSERT INTO api_keys (user_id, key_hash, name, created_at) VALUES (?, ?, ?, ?)'
+        )->execute([1, $keyHash, 'chartest', $now]);
+
+        $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $rawKey;
+
+        $result = authenticateApiKey($this->pdo);
+
+        $this->assertIsArray($result);
+        $this->assertSame($keyHash, $result['key_hash']);
+        $this->assertSame(1, (int) $result['user_id']);
+    }
+
+    // =========================================================================
+    // Existing ApiKeyRepository tests
+    // =========================================================================
+
     public function testCreateApiKeyReturnsPlainTextKey(): void
     {
         $rawKey = createApiKey($this->pdo, 1, 'Test key');
